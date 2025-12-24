@@ -7,74 +7,114 @@ import { validateEmails } from '../utils/validator';
 export async function startScrape(req: Request, res: Response) {
   try {
     const { actorId, input } = req.body;
-    if (!actorId) return res.status(400).json({ error: 'actorId is required' });
 
-    logger.info('Starting actor:', actorId);
+    if (!actorId) {
+      return res.status(400).json({ ok: false, error: 'actorId is required' });
+    }
+
+    logger.info(`Starting Apify actor: ${actorId}`);
+
+    // 1️⃣ Run actor & fetch dataset items
     const { run, items } = await apifyService.runActorAndFetchResults(actorId, input);
 
-    // Normalize items into Lead docs
-    const docs = (items || []).map((it: any) => {
-      const emails = Array.isArray(it.emails) ? it.emails : it.email ? [it.email] : [];
-      const phones = Array.isArray(it.phones) ? it.phones : it.phone ? [it.phone] : [];
+    if (!items || !items.length) {
+      return res.json({
+        ok: true,
+        actorRun: run,
+        itemsCount: 0,
+        savedCount: 0,
+        message: 'No leads found'
+      });
+    }
+
+    // 2️⃣ Normalize Apify dataset items → Lead docs
+    const docs = items.map((it: any) => {
+      const emails = Array.isArray(it.emails) ? it.emails : [];
+      const phones = Array.isArray(it.phones) ? it.phones : [];
 
       return {
-        name: it.name || it.title || it.company || '',
-        website: it.website || it.url || it.websiteUrl || '',
+        name: it.title || it.name || '',
+        website: it.url || '',
         emails,
         phones,
-        address: it.address || it.location || '',
+        address: it.address || '',
         sourceActor: actorId,
-        // ensure property exists so TypeScript allows assignment later
         validatedEmails: undefined as string[] | undefined,
         raw: it
       };
     });
 
-    // Optional: validate emails (if enabled)
-    if (process.env.ENABLE_EMAIL_VALIDATION === 'true' && process.env.EMAIL_VALIDATOR_API_KEY) {
-      logger.info('Validating emails for scraped leads...');
+    // 3️⃣ Optional email validation
+    if (
+      process.env.ENABLE_EMAIL_VALIDATION === 'true' &&
+      process.env.EMAIL_VALIDATOR_API_KEY
+    ) {
+      logger.info('Running email validation...');
       for (const doc of docs) {
-        if (doc.emails && doc.emails.length) {
+        if (doc.emails.length) {
           doc.validatedEmails = await validateEmails(doc.emails);
         }
       }
     }
 
-    // Insert with dedupe: we'll upsert by website or email
-    const savedDocs: any[] = [];
-    for (const doc of docs) {
-      // prefer dedupe by website or first email
-      const filter: any = {};
-      if (doc.website) filter.website = doc.website;
-      else if (doc.emails && doc.emails.length) filter.emails = { $in: doc.emails };
+    // 4️⃣ Save with deduplication
+    let savedCount = 0;
 
-      if (Object.keys(filter).length) {
-        // update existing or insert
-        const updated = await Lead.findOneAndUpdate(
-          filter,
-          { $setOnInsert: doc, $set: { updatedAt: new Date() } },
-          { upsert: true, new: true }
-        ).lean();
-        savedDocs.push(updated);
-      } else {
-        // no dedupe key, just insert
-        const created = await Lead.create(doc);
-        savedDocs.push(created);
-      }
+    for (const doc of docs) {
+      const filter =
+        doc.website
+          ? { website: doc.website }
+          : doc.emails.length
+          ? { emails: { $in: doc.emails } }
+          : null;
+
+      if (!filter) continue;
+
+      await Lead.findOneAndUpdate(
+        filter,
+        {
+          $set: {
+            name: doc.name,
+            phones: doc.phones,
+            address: doc.address,
+            sourceActor: doc.sourceActor,
+            raw: doc.raw,
+            ...(doc.validatedEmails ? { validatedEmails: doc.validatedEmails } : {})
+          },
+          $setOnInsert: {
+            website: doc.website,
+            emails: doc.emails
+          }
+        },
+        { upsert: true }
+      );
+
+      savedCount++;
     }
 
     return res.json({
       ok: true,
-      actorRun: run,
+      actorRun: {
+        id: run.id,
+        status: run.status,
+        startedAt: run.startedAt,
+        finishedAt: run.finishedAt
+      },
       itemsCount: items.length,
-      savedCount: savedDocs.length
+      savedCount
     });
   } catch (err: any) {
     logger.error('startScrape error:', err?.message || err);
-    return res.status(500).json({ error: err?.message || 'Server error' });
+    return res.status(500).json({
+      ok: false,
+      error: err?.message || 'Internal server error'
+    });
   }
 }
 
+/* =========================
+   LIST LEADS
+========================= */
 export async function listLeads(req: Request, res: Response) {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
@@ -84,9 +124,9 @@ export async function listLeads(req: Request, res: Response) {
     const filter: any = {};
     if (q) {
       filter.$or = [
-        { name: { $regex: q, $options: 'i' } },
-        { website: { $regex: q, $options: 'i' } },
-        { emails: { $regex: q, $options: 'i' } }
+        { name: new RegExp(q, 'i') },
+        { website: new RegExp(q, 'i') },
+        { emails: new RegExp(q, 'i') }
       ];
     }
 
@@ -97,19 +137,36 @@ export async function listLeads(req: Request, res: Response) {
       .limit(limit)
       .lean();
 
-    res.json({ ok: true, total, page, limit, items });
+    return res.json({
+      ok: true,
+      total,
+      page,
+      limit,
+      items
+    });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Server error' });
+    return res.status(500).json({
+      ok: false,
+      error: err?.message || 'Server error'
+    });
   }
 }
 
+/* =========================
+   GET SINGLE LEAD
+========================= */
 export async function getLead(req: Request, res: Response) {
   try {
-    const id = req.params.id;
-    const lead = await Lead.findById(id).lean();
-    if (!lead) return res.status(404).json({ error: 'Not found' });
-    res.json({ ok: true, lead });
+    const lead = await Lead.findById(req.params.id).lean();
+    if (!lead) {
+      return res.status(404).json({ ok: false, error: 'Lead not found' });
+    }
+
+    return res.json({ ok: true, lead });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Server error' });
+    return res.status(500).json({
+      ok: false,
+      error: err?.message || 'Server error'
+    });
   }
 }

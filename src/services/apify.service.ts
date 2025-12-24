@@ -3,55 +3,56 @@ import logger from '../utils/logger';
 import dotenv from 'dotenv';
 
 dotenv.config();
-const APIFY_TOKEN = process.env.APIFY_TOKEN || '';
-
-if (!APIFY_TOKEN) {
-  logger.error('APIFY_TOKEN is not set in .env — Apify calls will fail.');
+/* =========================
+   ENV VALIDATION
+========================= */
+if (!process.env.APIFY_TOKEN) {
+  throw new Error('❌ APIFY_TOKEN is missing. Check your .env file.');
 }
 
-const client = new ApifyClient({ token: APIFY_TOKEN });
+/* =========================
+   APIFY CLIENT
+========================= */
+const client = new ApifyClient({
+  token: process.env.APIFY_TOKEN,
+});
 
-async function runActorAndFetchResults(actorId: string, input: any = {}) {
-  
-  logger.info('Calling actor:', actorId);
-  // এখানে শুধু input পাস করবেন, কোনো options নয়
-  const run = await client.actor(actorId).call(input);
+/* =========================
+   RUN ACTOR + FETCH DATASET
+========================= */
+async function runActorAndFetchResults(actorId: string, input: any) {
+  try {
+    logger.info(`Calling Apify actor: ${actorId}`);
 
-  const datasetId = run.defaultDatasetId;
-  let items: any[] = [];
+    const run = await client.actor(actorId).call(input);
 
-  if (datasetId) {
-    logger.info('Fetching dataset items for dataset:', datasetId);
-    const datasetClient = client.dataset(datasetId);
+    if (!run || !run.defaultDatasetId) {
+      throw new Error('Actor finished but no defaultDatasetId returned');
+    }
 
-    let continuationToken: string | undefined = undefined;
-    
-    do {
-      // ✅ পরিবর্তন এখানে: options অবজেক্টটি ডাইনামিকলি তৈরি করা হচ্ছে
-      const listOptions: any = { limit: 1000 };
-      if (continuationToken) {
-        listOptions.continuationToken = continuationToken;
-      }
+    const dataset = client.dataset(run.defaultDatasetId);
+    const items: any[] = [];
 
-      const page = await datasetClient.listItems(listOptions);
+    let offset = 0;
+    const limit = 1000;
 
-      // Apify এর নতুন ভার্সনে ডাটা সাধারণত page.items এর ভেতরে থাকে
-      const pageItems = page.items || [];
-      
-      if (Array.isArray(pageItems) && pageItems.length > 0) {
-        items.push(...pageItems);
-      }
+    while (true) {
+      const res = await dataset.listItems({ offset, limit });
 
-      // টাইপ কাস্টিং করে continuationToken নেওয়া হচ্ছে
-      continuationToken = (page as any).continuationToken;
+      if (!res?.items || res.items.length === 0) break;
 
-    } while (continuationToken);
+      items.push(...res.items);
+      offset += limit;
+    }
 
-  } else {
-    logger.info('No defaultDatasetId on run, nothing to fetch');
+    logger.info(`Fetched ${items.length} dataset items`);
+
+    return { run, items };
+  } catch (err: any) {
+    // 🔥 FULL ERROR LOG (VERY IMPORTANT)
+    console.error('APIFY SERVICE ERROR =>', err?.response?.data || err);
+    throw err;
   }
-
-  return { run, items };
 }
 
 export default { runActorAndFetchResults };
