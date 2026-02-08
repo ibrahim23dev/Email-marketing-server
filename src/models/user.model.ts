@@ -1,13 +1,36 @@
-import mongoose, { Schema } from 'mongoose';
+import mongoose, { Schema, Document } from 'mongoose';
 
-const UserSchema = new Schema(
+export interface IUser extends Document {
+  name: string;
+  email: string;
+  password: string;
+  role: 'superadmin' | 'admin' | 'user';
+  isActive: boolean;
+  isEmailVerified: boolean;
+  trialEndsAt?: Date;
+  lastLoginAt?: Date;
+  avatar?: string;
+  phone?: string;
+  company?: string;
+  timezone: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const UserSchema = new Schema<IUser>(
   {
-    name: String,
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 100
+    },
     email: {
       type: String,
+      required: true,
       unique: true,
       lowercase: true,
-      required: true
+      trim: true
     },
     password: {
       type: String,
@@ -19,13 +42,28 @@ const UserSchema = new Schema(
       enum: ['superadmin', 'admin', 'user'],
       default: 'user'
     },
-    trialEndsAt: Date,
     isActive: {
       type: Boolean,
       default: true
+    },
+    isEmailVerified: {
+      type: Boolean,
+      default: false
+    },
+    trialEndsAt: Date,
+    lastLoginAt: Date,
+    avatar: String,
+    phone: String,
+    company: String,
+    timezone: {
+      type: String,
+      default: 'UTC'
     }
   },
   { timestamps: true }
 );
 
-export default mongoose.model('User', UserSchema);
+UserSchema.index({ email: 1 });
+UserSchema.index({ role: 1 });
+
+export default mongoose.model<IUser>('User', UserSchema);

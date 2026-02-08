@@ -1,24 +1,30 @@
 import { Router } from 'express';
-import { register, login } from '../controllers/auth.controller';
+import { 
+  register, 
+  login, 
+  verifyEmail, 
+  resendVerificationOTP,
+  forgotPassword, 
+  resetPassword,
+  changePassword,
+  logout,
+  getCurrentUser
+} from '../controllers/auth.controller';
 import { authGuard } from '../middlewares/auth.middleware';
-import { allowRoles } from '../middlewares/role.middleware';
 
 const router = Router();
 
+// Public routes
 router.post('/register', register);
 router.post('/login', login);
+router.post('/verify-email', verifyEmail);
+router.post('/resend-verification', resendVerificationOTP);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 
-/* Protected examples */
-router.get('/admin',
-  authGuard,
-  allowRoles('admin', 'superadmin'),
-  (req, res) => res.json({ ok: true, msg: 'Admin access' })
-);
-
-router.get('/superadmin',
-  authGuard,
-  allowRoles('superadmin'),
-  (req, res) => res.json({ ok: true, msg: 'Superadmin access' })
-);
+// Protected routes
+router.get('/me', authGuard, getCurrentUser);
+router.post('/change-password', authGuard, changePassword);
+router.post('/logout', authGuard, logout);
 
 export default router;
