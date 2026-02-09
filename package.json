@@ -1,13 +1,14 @@
 {
   "name": "Email-marketing-server",
   "version": "1.0.0",
-  "description": "Apify-based email scraper REST API (Node.js + TypeScript + Express + MongoDB)",
-  "main": "index.ts",
+  "description": "Enterprise-grade Email Marketing REST API (Node.js + TypeScript + Express + MongoDB)",
+  "main": "dist/server.js",
   "type": "module",
   "scripts": {
-    "dev": "nodemon --exec tsx src/index.ts",
+    "dev": "nodemon --exec tsx src/server.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/server.js",
+    "lint": "eslint src/**/*.ts"
   },
   "engines": {
     "node": ">=18"
