@@ -1,75 +1,59 @@
-# Email Marketing Server - API Documentation
+# Email Marketing Server - Complete API Documentation
 
-## Base URL
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Base URLs](#base-urls)
+3. [Authentication & Authorization](#authentication--authorization)
+4. [OTP Verification System](#otp-verification-system)
+5. [Auth API](#auth-api)
+6. [Campaigns API](#campaigns-api)
+7. [Subscribers API](#subscribers-api)
+8. [Audiences API](#audiences-api)
+9. [Templates API](#templates-api)
+10. [Tags API](#tags-api)
+11. [Analytics API](#analytics-api)
+12. [Dashboard API](#dashboard-api)
+13. [Settings API](#settings-api)
+14. [User Management API](#user-management-api)
+15. [Audit Logs API](#audit-logs-api)
+16. [Scrape API](#scrape-api)
+17. [Frontend Integration Guidelines](#frontend-integration-guidelines)
+18. [Error Codes](#error-codes)
+19. [Webhooks](#webhooks)
+
+---
+
+## Introduction
+
+This is a comprehensive API documentation for the Email Marketing Server. The API allows you to manage email campaigns, subscribers, audiences, and analytics. All endpoints follow RESTful conventions.
+
+### Current Version
+- **API Version:** v1
+- **Server Status:** Running on `http://localhost:3000`
+
+---
+
+## Base URLs
+
 ```
-http://localhost:3000/api
+Production: https://your-domain.com/api/v1
+Development: http://localhost:3000/api/v1
 ```
 
-## Authentication
+**Note:** Some endpoints use `/api` instead of `/api/v1` (legacy routes). Use the routes as specified in each section.
+
+---
+
+## Authentication & Authorization
+
+### Getting a JWT Token
 All protected routes require a Bearer token in the Authorization header:
-```
+
+```http
 Authorization: Bearer <your-jwt-token>
 ```
 
----
-
-## Table of Contents
-1. [Auth API](#auth-api)
-2. [Campaigns API](#campaigns-api)
-3. [Subscribers API](#subscribers-api)
-4. [Audiences API](#audiences-api)
-5. [Templates API](#templates-api)
-6. [Tags API](#tags-api)
-7. [Analytics API](#analytics-api)
-8. [Dashboard API](#dashboard-api)
-9. [Settings API](#settings-api)
-10. [User Management API](#user-management-api)
-11. [Audit Logs API](#audit-logs-api)
-12. [Scrape API](#scrape-api)
-
----
-
-## Auth API
-
-### Register
-Create a new user account.
-
-**Endpoint:** `POST /api/auth/register`
-
-**Request Body:**
-```json
-{
-  "name": "John Doe",
-  "email": "john@example.com",
-  "password": "securePassword123"
-}
-```
-
-**Response (201):**
-```json
-{
-  "ok": true,
-  "message": "Registration successful. Please verify your email.",
-  "userId": "507f1f77bcf86cd799439011"
-}
-```
-
----
-
-### Login
-Authenticate and receive a JWT token.
-
-**Endpoint:** `POST /api/auth/login`
-
-**Request Body:**
-```json
-{
-  "email": "john@example.com",
-  "password": "securePassword123"
-}
-```
-
-**Response (200):**
+### Token Response (After Login)
 ```json
 {
   "ok": true,
@@ -80,17 +64,133 @@ Authenticate and receive a JWT token.
     "email": "john@example.com",
     "role": "user",
     "isEmailVerified": false,
-    "trialEndsAt": "2026-03-08T11:40:03.000Z"
+    "trialEndsAt": "2026-03-15T09:22:49.823Z"
   }
+}
+```
+
+### Token Expiration
+- JWT tokens expire after 7 days
+- Include the token in all protected API requests
+
+---
+
+## OTP Verification System
+
+### How OTP Works
+
+The system uses OTP (One-Time Password) for:
+1. **Email Verification** - Verify user's email after registration
+2. **Password Reset** - Reset password when user forgets it
+
+### OTP Flow
+
+#### Registration Flow (with OTP)
+```
+1. User submits registration form
+   ↓
+2. Server creates user (unverified)
+   ↓
+3. Server generates 6-digit OTP
+   ↓
+4. OTP sent to user's email
+   ↓
+5. User enters OTP to verify email
+   ↓
+6. Email verified successfully
+```
+
+#### Password Reset Flow
+```
+1. User clicks "Forgot Password"
+   ↓
+2. User enters email address
+   ↓
+3. Server generates OTP
+   ↓
+4. OTP sent to user's email
+   ↓
+5. User enters OTP + new password
+   ↓
+6. Password reset successfully
+```
+
+### OTP Details
+- **Format:** 6-character alphanumeric (e.g., "A1B2C3")
+- **Validity:** 
+  - Email Verification: 24 hours
+  - Password Reset: 1 hour
+- **Delivery:** Sent via email (currently logged to console in development)
+
+---
+
+## Auth API
+
+### Base Endpoint: `/api/v1/auth`
+
+---
+
+### 1. Register
+
+Create a new user account. After registration, an OTP is sent to the user's email for verification.
+
+**Endpoint:** `POST /api/v1/auth/register`
+
+**Request Body:**
+```json
+{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "password": "securePassword123"
+}
+```
+
+**Parameters:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| name | string | Yes | User's full name (min 2 chars) |
+| email | string | Yes | Valid email address |
+| password | string | Yes | Password (min 6 chars) |
+
+**Response (201 - Created):**
+```json
+{
+  "ok": true,
+  "message": "Registration successful. Please verify your email.",
+  "userId": "507f1f77bcf86cd799439011"
+}
+```
+
+**Error Responses:**
+- 400: Email already registered
+- 500: Registration failed
+
+**Frontend Implementation:**
+```javascript
+// Example registration call
+async function register(name, email, password) {
+  const response = await fetch('/api/v1/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, password })
+  });
+  const data = await response.json();
+  
+  if (data.ok) {
+    // Redirect to OTP verification page
+    window.location.href = `/verify-email?email=${encodeURIComponent(email)}`;
+  }
+  return data;
 }
 ```
 
 ---
 
-### Verify Email
-Verify user's email with OTP.
+### 2. Verify Email
 
-**Endpoint:** `POST /api/auth/verify-email`
+Verify user's email with OTP sent during registration.
+
+**Endpoint:** `POST /api/v1/auth/verify-email`
 
 **Request Body:**
 ```json
@@ -100,7 +200,13 @@ Verify user's email with OTP.
 }
 ```
 
-**Response (200):**
+**Parameters:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| email | string | Yes | User's email address |
+| otp | string | Yes | 6-character OTP code |
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -108,12 +214,37 @@ Verify user's email with OTP.
 }
 ```
 
+**Error Responses:**
+- 400: Invalid or expired OTP
+- 400: OTP has expired
+
+**Frontend Implementation:**
+```javascript
+// Example email verification call
+async function verifyEmail(email, otp) {
+  const response = await fetch('/api/v1/auth/verify-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, otp })
+  });
+  const data = await response.json();
+  
+  if (data.ok) {
+    // Show success message and redirect to login
+    alert('Email verified successfully! Please login.');
+    window.location.href = '/login';
+  }
+  return data;
+}
+```
+
 ---
 
-### Resend Verification OTP
-Resend email verification OTP.
+### 3. Resend Verification OTP
 
-**Endpoint:** `POST /api/auth/resend-verification`
+Resend the verification OTP if the previous one expired or wasn't received.
+
+**Endpoint:** `POST /api/v1/auth/resend-verification`
 
 **Request Body:**
 ```json
@@ -122,7 +253,12 @@ Resend email verification OTP.
 }
 ```
 
-**Response (200):**
+**Parameters:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| email | string | Yes | User's email address |
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -130,12 +266,93 @@ Resend email verification OTP.
 }
 ```
 
+**Error Responses:**
+- 404: User not found
+- 400: Email already verified
+
+**Frontend Implementation:**
+```javascript
+// Example resend OTP call
+async function resendVerificationOTP(email) {
+  const response = await fetch('/api/v1/auth/resend-verification', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  });
+  return await response.json();
+}
+```
+
 ---
 
-### Forgot Password
-Request password reset OTP.
+### 4. Login
 
-**Endpoint:** `POST /api/auth/forgot-password`
+Authenticate and receive a JWT token.
+
+**Endpoint:** `POST /api/v1/auth/login`
+
+**Request Body:**
+```json
+{
+  "email": "john@example.com",
+  "password": "securePassword123"
+}
+```
+
+**Parameters:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| email | string | Yes | Registered email address |
+| password | string | Yes | User's password |
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "507f1f77bcf86cd799439011",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "role": "user",
+    "isEmailVerified": false,
+    "trialEndsAt": "2026-03-15T09:22:49.823Z"
+  }
+}
+```
+
+**Error Responses:**
+- 401: Invalid credentials
+- 403: Account is disabled
+- 403: Free trial expired (includes `trialExpired: true` flag)
+
+**Frontend Implementation:**
+```javascript
+// Example login call with token storage
+async function login(email, password) {
+  const response = await fetch('/api/v1/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+  const data = await response.json();
+  
+  if (data.ok && data.token) {
+    // Store token securely
+    localStorage.setItem('authToken', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+  }
+  return data;
+}
+```
+
+---
+
+### 5. Forgot Password
+
+Request a password reset OTP. This endpoint always returns success for security reasons (doesn't reveal if email exists).
+
+**Endpoint:** `POST /api/v1/auth/forgot-password`
 
 **Request Body:**
 ```json
@@ -144,7 +361,12 @@ Request password reset OTP.
 }
 ```
 
-**Response (200):**
+**Parameters:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| email | string | Yes | Registered email address |
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -152,12 +374,30 @@ Request password reset OTP.
 }
 ```
 
+**Frontend Implementation:**
+```javascript
+// Example forgot password call
+async function forgotPassword(email) {
+  const response = await fetch('/api/v1/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  });
+  const data = await response.json();
+  
+  // Always show this message for security
+  alert('If the email exists, a reset link has been sent');
+  return data;
+}
+```
+
 ---
 
-### Reset Password
-Reset password with OTP.
+### 6. Reset Password
 
-**Endpoint:** `POST /api/auth/reset-password`
+Reset password using OTP sent to user's email.
+
+**Endpoint:** `POST /api/v1/auth/reset-password`
 
 **Request Body:**
 ```json
@@ -168,7 +408,14 @@ Reset password with OTP.
 }
 ```
 
-**Response (200):**
+**Parameters:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| email | string | Yes | User's email address |
+| otp | string | Yes | 6-character OTP code |
+| newPassword | string | Yes | New password (min 6 chars) |
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -176,39 +423,43 @@ Reset password with OTP.
 }
 ```
 
----
+**Error Responses:**
+- 400: Invalid or expired OTP
+- 400: OTP has expired
 
-### Change Password (Protected)
-Change password for authenticated user.
-
-**Endpoint:** `POST /api/auth/change-password`
-**Headers:** `Authorization: Bearer <token>`
-
-**Request Body:**
-```json
-{
-  "currentPassword": "oldPassword123",
-  "newPassword": "newSecurePassword456"
+**Frontend Implementation:**
+```javascript
+// Example reset password call
+async function resetPassword(email, otp, newPassword) {
+  const response = await fetch('/api/v1/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, otp, newPassword })
+  });
+  const data = await response.json();
+  
+  if (data.ok) {
+    alert('Password reset successfully! Please login with your new password.');
+    window.location.href = '/login';
+  }
+  return data;
 }
 ```
 
-**Response (200):**
-```json
-{
-  "ok": true,
-  "message": "Password changed successfully"
-}
-```
-
 ---
 
-### Get Current User (Protected)
-Get authenticated user's profile.
+### 7. Get Current User
 
-**Endpoint:** `GET /api/auth/me`
-**Headers:** `Authorization: Bearer <token>`
+Get authenticated user's profile information.
 
-**Response (200):**
+**Endpoint:** `GET /api/v1/auth/me`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -219,26 +470,82 @@ Get authenticated user's profile.
     "role": "user",
     "isActive": true,
     "isEmailVerified": true,
-    "trialEndsAt": "2026-03-08T11:40:03.000Z",
-    "lastLoginAt": "2026-02-08T11:40:03.000Z",
+    "trialEndsAt": "2026-03-15T09:22:49.823Z",
+    "lastLoginAt": "2026-02-15T08:00:00.000Z",
     "avatar": null,
     "phone": "+1234567890",
     "company": "Acme Inc",
     "timezone": "UTC",
-    "settings": {}
+    "settings": {
+      "notifications": {
+        "email": true,
+        "push": true
+      },
+      "security": {
+        "twoFactorEnabled": false
+      }
+    }
   }
 }
 ```
 
+**Error Responses:**
+- 401: Unauthorized (invalid/missing token)
+- 404: User not found
+
 ---
 
-### Logout (Protected)
+### 8. Change Password
+
+Change password for authenticated user (requires current password).
+
+**Endpoint:** `POST /api/v1/auth/change-password`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Request Body:**
+```json
+{
+  "currentPassword": "oldPassword123",
+  "newPassword": "newSecurePassword456"
+}
+```
+
+**Parameters:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| currentPassword | string | Yes | User's current password |
+| newPassword | string | Yes | New password (min 6 chars) |
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "message": "Password changed successfully"
+}
+```
+
+**Error Responses:**
+- 401: Current password is incorrect
+- 500: Password change failed
+
+---
+
+### 9. Logout
+
 Logout and invalidate session.
 
-**Endpoint:** `POST /api/auth/logout`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `POST /api/v1/auth/logout`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -246,28 +553,67 @@ Logout and invalidate session.
 }
 ```
 
+**Frontend Implementation:**
+```javascript
+// Example logout call
+async function logout() {
+  const token = localStorage.getItem('authToken');
+  
+  const response = await fetch('/api/v1/auth/logout', {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  
+  // Clear stored data regardless of response
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('user');
+  window.location.href = '/login';
+  
+  return await response.json();
+}
+```
+
 ---
 
 ## Campaigns API
 
-### Get All Campaigns
+### Base Endpoint: `/api/v1/campaigns`
+
+All campaigns endpoints require authentication.
+
+---
+
+### 1. Get All Campaigns
+
 Retrieve paginated list of campaigns.
 
-**Endpoint:** `GET /api/campaigns`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `GET /api/v1/campaigns`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
 **Query Parameters:**
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| page | number | Page number | 1 |
-| limit | number | Items per page | 20 |
-| search | string | Search in name/subject | - |
-| status | string | Filter by status | - |
-| type | string | Filter by type | - |
-| sortBy | string | Sort field | createdAt |
-| sortOrder | string | asc or desc | desc |
+| Parameter | Type | Required | Description | Default |
+|-----------|------|----------|-------------|---------|
+| page | number | No | Page number | 1 |
+| limit | number | No | Items per page (max 100) | 20 |
+| search | string | No | Search in name/subject | - |
+| status | string | No | Filter by status (draft, scheduled, sending, sent, paused, failed) | - |
+| type | string | No | Filter by type (newsletter, promotional, transactional, welcome) | - |
+| sortBy | string | No | Sort field | createdAt |
+| sortOrder | string | No | Sort direction (asc/desc) | desc |
 
-**Response (200):**
+**Example Request:**
+```
+GET /api/v1/campaigns?page=1&limit=10&status=draft&sortBy=createdAt&sortOrder=desc
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -297,8 +643,8 @@ Retrieve paginated list of campaigns.
         "complained": 0
       },
       "tags": ["welcome", "newsletter"],
-      "createdAt": "2026-02-08T11:40:03.000Z",
-      "updatedAt": "2026-02-08T11:40:03.000Z"
+      "createdAt": "2026-02-15T09:22:49.823Z",
+      "updatedAt": "2026-02-15T09:22:49.823Z"
     }
   ],
   "pagination": {
@@ -314,13 +660,18 @@ Retrieve paginated list of campaigns.
 
 ---
 
-### Get Campaign By ID
+### 2. Get Campaign By ID
+
 Retrieve a single campaign by ID.
 
-**Endpoint:** `GET /api/campaigns/:id`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `GET /api/v1/campaigns/:id`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -352,19 +703,25 @@ Retrieve a single campaign by ID.
     "tags": ["welcome"],
     "scheduledAt": null,
     "sentAt": null,
-    "createdAt": "2026-02-08T11:40:03.000Z",
-    "updatedAt": "2026-02-08T11:40:03.000Z"
+    "createdAt": "2026-02-15T09:22:49.823Z",
+    "updatedAt": "2026-02-15T09:22:49.823Z"
   }
 }
 ```
 
 ---
 
-### Create Campaign
+### 3. Create Campaign
+
 Create a new email campaign.
 
-**Endpoint:** `POST /api/campaigns`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `POST /api/v1/campaigns`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
@@ -377,11 +734,31 @@ Create a new email campaign.
   "audienceId": "507f1f77bcf86cd799439012",
   "templateId": "507f1f77bcf86cd799439013",
   "tags": ["sale", "summer"],
-  "scheduledAt": "2026-06-01T09:00:00.000Z"
+  "scheduledAt": "2026-06-01T09:00:00.000Z",
+  "settings": {
+    "trackOpens": true,
+    "trackClicks": true,
+    "unsubscribeLink": true,
+    "replyTo": "support@example.com"
+  }
 }
 ```
 
-**Response (201):**
+**Parameters:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| name | string | Yes | Campaign name |
+| subject | string | Yes | Email subject line |
+| body | string | No | HTML email body |
+| type | string | Yes | newsletter/promotional/transactional/welcome |
+| provider | string | Yes | Email provider (sendgrid/mailgun/aws-ses) |
+| audienceId | string | Yes | Target audience ID |
+| templateId | string | No | Template ID to use |
+| tags | array | No | Array of tag strings |
+| scheduledAt | string | No | ISO date for scheduled sending |
+| settings | object | No | Campaign settings |
+
+**Response (201 - Created):**
 ```json
 {
   "ok": true,
@@ -389,7 +766,6 @@ Create a new email campaign.
     "_id": "507f1f77bcf86cd799439011",
     "name": "Summer Sale Campaign",
     "subject": "🔥 Don't Miss Our Summer Sale!",
-    "body": "<html><body><h1>Summer Sale</h1><p>Up to 50% off!</p></body></html>",
     "status": "scheduled",
     "type": "promotional",
     "provider": "sendgrid",
@@ -406,8 +782,8 @@ Create a new email campaign.
     },
     "tags": ["sale", "summer"],
     "scheduledAt": "2026-06-01T09:00:00.000Z",
-    "createdAt": "2026-02-08T11:40:03.000Z",
-    "updatedAt": "2026-02-08T11:40:03.000Z"
+    "createdAt": "2026-02-15T09:22:49.823Z",
+    "updatedAt": "2026-02-15T09:22:49.823Z"
   },
   "message": "Campaign created successfully"
 }
@@ -415,11 +791,17 @@ Create a new email campaign.
 
 ---
 
-### Update Campaign
+### 4. Update Campaign
+
 Update an existing campaign.
 
-**Endpoint:** `PUT /api/campaigns/:id`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `PUT /api/v1/campaigns/:id`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
@@ -430,7 +812,7 @@ Update an existing campaign.
 }
 ```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -438,9 +820,8 @@ Update an existing campaign.
     "_id": "507f1f77bcf86cd799439011",
     "name": "Updated Summer Sale Campaign",
     "subject": "🎉 Summer Sale - Extra 10% Off!",
-    "body": "<html><body><h1>Summer Sale</h1><p>Extra 10% off!</p></body></html>",
     "status": "draft",
-    "updatedAt": "2026-02-08T12:00:00.000Z"
+    "updatedAt": "2026-02-15T10:00:00.000Z"
   },
   "message": "Campaign updated successfully"
 }
@@ -448,13 +829,18 @@ Update an existing campaign.
 
 ---
 
-### Delete Campaign
+### 5. Delete Campaign
+
 Delete a campaign.
 
-**Endpoint:** `DELETE /api/campaigns/:id`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `DELETE /api/v1/campaigns/:id`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -464,13 +850,49 @@ Delete a campaign.
 
 ---
 
-### Send Campaign
-Start sending a campaign.
+### 6. Validate Campaign
 
-**Endpoint:** `POST /api/campaigns/:id/send`
-**Headers:** `Authorization: Bearer <token>`
+Validate campaign before sending.
 
-**Response (200):**
+**Endpoint:** `GET /api/v1/campaigns/validate`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Query Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| audienceId | string | Yes | Audience ID to validate |
+| templateId | string | No | Template ID to validate |
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "data": {
+    "valid": true,
+    "errors": [],
+    "warnings": ["No template selected - using default"]
+  }
+}
+```
+
+---
+
+### 7. Send Campaign
+
+Start sending a campaign immediately.
+
+**Endpoint:** `POST /api/v1/campaigns/:id/send`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -483,11 +905,17 @@ Start sending a campaign.
 
 ---
 
-### Schedule Campaign
+### 8. Schedule Campaign
+
 Schedule a campaign for future sending.
 
-**Endpoint:** `POST /api/campaigns/:id/schedule`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `POST /api/v1/campaigns/:id/schedule`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
@@ -496,13 +924,12 @@ Schedule a campaign for future sending.
 }
 ```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "message": "Campaign scheduled successfully",
   "data": {
-    "campaignId": "507f1f77bcf86cd799439011",
     "scheduledAt": "2026-06-01T09:00:00.000Z"
   }
 }
@@ -510,65 +937,67 @@ Schedule a campaign for future sending.
 
 ---
 
-### Pause Campaign
-Pause a sending/scheduled campaign.
+### 9. Pause Campaign
 
-**Endpoint:** `POST /api/campaigns/:id/pause`
-**Headers:** `Authorization: Bearer <token>`
+Pause a sending campaign.
 
-**Response (200):**
+**Endpoint:** `POST /api/v1/campaigns/:id/pause`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
-  "message": "Campaign paused",
-  "data": {
-    "campaignId": "507f1f77bcf86cd799439011"
-  }
+  "message": "Campaign paused successfully"
 }
 ```
 
 ---
 
-### Resume Campaign
+### 10. Resume Campaign
+
 Resume a paused campaign.
 
-**Endpoint:** `POST /api/campaigns/:id/resume`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `POST /api/v1/campaigns/:id/resume`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
-  "ok": true": "Campaign resumed,
-  "message",
-  "data": {
-    "campaignId": "507f1f77bcf86cd799439011"
-  }
+  "ok": true,
+  "message": "Campaign resumed successfully"
 }
 ```
 
 ---
 
-### Duplicate Campaign
+### 11. Duplicate Campaign
+
 Create a copy of an existing campaign.
 
-**Endpoint:** `POST /api/campaigns/:id/duplicate`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `POST /api/v1/campaigns/:id/duplicate`
 
-**Response (201):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
     "_id": "507f1f77bcf86cd799439014",
-    "name": "Copy of Summer Sale Campaign",
-    "subject": "🎉 Summer Sale - Extra 10% Off!",
-    "body": "<html><body><h1>Summer Sale</h1><p>Extra 10% off!</p></body></html>",
-    "status": "draft",
-    "type": "promotional",
-    "audienceId": "507f1f77bcf86cd799439012",
-    "templateId": "507f1f77bcf86cd799439013",
-    "tags": ["sale", "summer"],
-    "createdAt": "2026-02-08T12:00:00.000Z"
+    "name": "Welcome Campaign (Copy)",
+    "status": "draft"
   },
   "message": "Campaign duplicated successfully"
 }
@@ -576,60 +1005,38 @@ Create a copy of an existing campaign.
 
 ---
 
-### Validate Campaign
-Validate campaign data before sending.
+### 12. Get Campaign Analytics
 
-**Endpoint:** `GET /api/campaigns/validate`
-**Headers:** `Authorization: Bearer <token>`
-
-**Query Parameters:** Same as create campaign body parameters
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": {
-    "isValid": true,
-    "issues": []
-  }
-}
-```
-
----
-
-### Get Campaign Analytics
 Get detailed analytics for a specific campaign.
 
-**Endpoint:** `GET /api/campaigns/:id/analytics`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `GET /api/v1/campaigns/:id/analytics`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
-    "campaign": {
-      "id": "507f1f77bcf86cd799439011",
-      "name": "Summer Sale Campaign",
-      "subject": "🔥 Don't Miss Our Summer Sale!",
-      "status": "completed",
-      "createdAt": "2026-02-08T11:40:03.000Z",
-      "sentAt": "2026-02-08T11:45:00.000Z"
-    },
+    "campaignId": "507f1f77bcf86cd799439011",
     "stats": {
       "sent": 1000,
       "delivered": 980,
-      "opened": 245,
-      "clicked": 98,
+      "opened": 450,
+      "clicked": 120,
       "bounced": 20,
       "unsubscribed": 5,
-      "complained": 0
+      "complained": 2
     },
     "rates": {
-      "openRate": "25.00",
-      "clickRate": "40.00",
-      "bounceRate": "2.00",
-      "unsubscribeRate": "0.51"
+      "deliveryRate": 98.0,
+      "openRate": 45.9,
+      "clickRate": 12.2,
+      "bounceRate": 2.0,
+      "unsubscribeRate": 0.5
     }
   }
 }
@@ -639,143 +1046,144 @@ Get detailed analytics for a specific campaign.
 
 ## Subscribers API
 
-### Get All Subscribers
+### Base Endpoint: `/api/subscribers`
+
+All subscribers endpoints require authentication.
+
+---
+
+### 1. Get All Subscribers
+
 Retrieve paginated list of subscribers.
 
 **Endpoint:** `GET /api/subscribers`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
 **Query Parameters:**
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| page | number | Page number | 1 |
-| limit | number | Items per page | 20 |
-| search | string | Search in email/firstName/lastName | - |
-| status | string | Filter by status | - |
-| tags | string | Comma-separated tags | - |
+| Parameter | Type | Required | Description | Default |
+|-----------|------|----------|-------------|---------|
+| page | number | No | Page number | 1 |
+| limit | number | No | Items per page | 20 |
+| search | string | No | Search in email/name | - |
+| status | string | No | Filter by status (active/unsubscribed/cleaned) | - |
+| audienceId | string | No | Filter by audience | - |
+| tag | string | No | Filter by tag | - |
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": [
     {
-      "_id": "507f1f77bcf86cd799439021",
+      "_id": "507f1f77bcf86cd799439011",
       "email": "john@example.com",
       "firstName": "John",
       "lastName": "Doe",
       "status": "active",
-      "tags": ["newsletter", "premium"],
-      "source": "manual",
-      "customFields": {
-        "city": "New York",
-        "company": "Acme Inc"
-      },
-      "stats": {
-        "campaignsReceived": 10,
-        "campaignsOpened": 5,
-        "campaignsClicked": 2,
-        "lastOpenedAt": "2026-02-07T14:30:00.000Z",
-        "lastClickedAt": "2026-02-07T14:35:00.000Z"
-      },
-      "emailValidation": {
-        "isValid": true,
-        "validationDate": "2026-02-08T11:40:03.000Z"
-      },
-      "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-02-08T11:40:03.000Z"
+      "tags": ["vip", "newsletter"],
+      "audiences": ["507f1f77bcf86cd799439012"],
+      "createdAt": "2026-02-15T09:22:49.823Z",
+      "updatedAt": "2026-02-15T09:22:49.823Z"
     }
   ],
   "pagination": {
     "page": 1,
     "limit": 20,
-    "total": 500,
-    "totalPages": 25
+    "total": 1000,
+    "totalPages": 50,
+    "hasNext": true,
+    "hasPrev": false
   }
 }
 ```
 
 ---
 
-### Get Subscriber By ID
-Retrieve a single subscriber.
+### 2. Get Subscriber By ID
+
+Retrieve a single subscriber by ID.
 
 **Endpoint:** `GET /api/subscribers/:id`
-**Headers:** `Authorization: Bearer <token>`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
-    "_id": "507f1f77bcf86cd799439021",
+    "_id": "507f1f77bcf86cd799439011",
     "email": "john@example.com",
     "firstName": "John",
     "lastName": "Doe",
+    "phone": "+1234567890",
     "status": "active",
-    "tags": ["newsletter", "premium"],
-    "source": "manual",
+    "tags": ["vip"],
+    "audiences": [
+      {
+        "_id": "507f1f77bcf86cd799439012",
+        "name": "All Subscribers"
+      }
+    ],
     "customFields": {
-      "city": "New York",
-      "company": "Acme Inc"
+      "company": "Acme Inc",
+      "position": "Developer"
     },
-    "stats": {
-      "campaignsReceived": 10,
-      "campaignsOpened": 5,
-      "campaignsClicked": 2
-    },
-    "createdAt": "2026-01-01T00:00:00.000Z",
-    "updatedAt": "2026-02-08T11:40:03.000Z"
+    "createdAt": "2026-02-15T09:22:49.823Z",
+    "updatedAt": "2026-02-15T09:22:49.823Z"
   }
 }
 ```
 
 ---
 
-### Create Subscriber
+### 3. Create Subscriber
+
 Create a new subscriber.
 
 **Endpoint:** `POST /api/subscribers`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
 {
-  "email": "jane@example.com",
-  "firstName": "Jane",
-  "lastName": "Smith",
-  "tags": ["newsletter", "vip"],
-  "source": "landing_page",
+  "email": "john@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "phone": "+1234567890",
+  "tags": ["newsletter"],
+  "audienceId": "507f1f77bcf86cd799439012",
   "customFields": {
-    "city": "Los Angeles",
-    "company": "Tech Corp"
+    "company": "Acme Inc",
+    "position": "Developer"
   }
 }
 ```
 
-**Response (201):**
+**Response (201 - Created):**
 ```json
 {
   "ok": true,
   "data": {
-    "_id": "507f1f77bcf86cd799439022",
-    "email": "jane@example.com",
-    "firstName": "Jane",
-    "lastName": "Smith",
+    "_id": "507f1f77bcf86cd799439011",
+    "email": "john@example.com",
+    "firstName": "John",
+    "lastName": "Doe",
     "status": "active",
-    "tags": ["newsletter", "vip"],
-    "source": "landing_page",
-    "customFields": {
-      "city": "Los Angeles",
-      "company": "Tech Corp"
-    },
-    "stats": {
-      "campaignsReceived": 0,
-      "campaignsOpened": 0,
-      "campaignsClicked": 0
-    },
-    "createdAt": "2026-02-08T12:00:00.000Z",
-    "updatedAt": "2026-02-08T12:00:00.000Z"
+    "tags": ["newsletter"],
+    "createdAt": "2026-02-15T09:22:49.823Z"
   },
   "message": "Subscriber created successfully"
 }
@@ -783,84 +1191,82 @@ Create a new subscriber.
 
 ---
 
-### Bulk Create Subscribers
-Import multiple subscribers at once.
+### 4. Bulk Create Subscribers
+
+Create multiple subscribers at once.
 
 **Endpoint:** `POST /api/subscribers/bulk`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
 {
   "subscribers": [
     {
-      "email": "user1@example.com",
-      "firstName": "User",
-      "lastName": "One",
-      "tags": ["newsletter"]
+      "email": "john@example.com",
+      "firstName": "John",
+      "lastName": "Doe"
     },
     {
-      "email": "user2@example.com",
-      "firstName": "User",
-      "lastName": "Two",
-      "tags": ["newsletter"]
-    },
-    {
-      "email": "user3@example.com",
-      "firstName": "User",
-      "lastName": "Three",
-      "tags": ["promotions"]
+      "email": "jane@example.com",
+      "firstName": "Jane",
+      "lastName": "Smith"
     }
   ],
-  "source": "csv_import"
+  "audienceId": "507f1f77bcf86cd799439012",
+  "tags": ["bulk-import"]
 }
 ```
 
-**Response (200):**
+**Response (201 - Created):**
 ```json
 {
   "ok": true,
   "data": {
     "created": 2,
-    "skipped": 1,
+    "failed": 0,
     "errors": []
-  },
-  "message": "Bulk import completed"
+  }
 }
 ```
 
 ---
 
-### Update Subscriber
+### 5. Update Subscriber
+
 Update an existing subscriber.
 
 **Endpoint:** `PUT /api/subscribers/:id`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
 {
-  "firstName": "Jane Updated",
-  "tags": ["newsletter", "vip", "premium"],
-  "customFields": {
-    "city": "San Francisco",
-    "company": "New Tech Corp"
-  }
+  "firstName": "John Updated",
+  "lastName": "Doe Updated",
+  "tags": ["vip", "newsletter", "updated"]
 }
 ```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
-    "_id": "507f1f77bcf86cd799439022",
-    "email": "jane@example.com",
-    "firstName": "Jane Updated",
-    "lastName": "Smith",
-    "status": "active",
-    "tags": ["newsletter", "vip", "premium"],
-    "updatedAt": "2026-02-08T12:30:00.000Z"
+    "_id": "507f1f77bcf86cd799439011",
+    "email": "john@example.com",
+    "firstName": "John Updated",
+    "tags": ["vip", "newsletter", "updated"]
   },
   "message": "Subscriber updated successfully"
 }
@@ -868,13 +1274,18 @@ Update an existing subscriber.
 
 ---
 
-### Delete Subscriber
+### 6. Delete Subscriber
+
 Delete a subscriber.
 
 **Endpoint:** `DELETE /api/subscribers/:id`
-**Headers:** `Authorization: Bearer <token>`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -884,38 +1295,64 @@ Delete a subscriber.
 
 ---
 
-### Unsubscribe
-Unsubscribe a subscriber from emails.
+### 7. Unsubscribe
+
+Unsubscribe a subscriber from all emails.
 
 **Endpoint:** `POST /api/subscribers/:id/unsubscribe`
-**Headers:** `Authorization: Bearer <token>`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "reason": "No longer interested"
+}
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
-  "message": "Unsubscribed successfully"
+  "message": "Subscriber unsubscribed successfully"
 }
 ```
 
 ---
 
-### Get Subscriber Stats
+### 8. Get Subscriber Stats
+
 Get subscriber statistics.
 
 **Endpoint:** `GET /api/subscribers/stats`
-**Headers:** `Authorization: Bearer <token>`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
-    "total": 500,
-    "active": 450,
-    "unsubscribed": 30,
-    "bounced": 20,
-    "unsubscribeRate": "6.00"
+    "total": 1000,
+    "active": 850,
+    "unsubscribed": 100,
+    "cleaned": 50,
+    "byTag": {
+      "vip": 50,
+      "newsletter": 600,
+      "promotional": 300
+    },
+    "byAudience": {
+      "507f1f77bcf86cd799439012": 700,
+      "507f1f77bcf86cd799439013": 300
+    }
   }
 }
 ```
@@ -924,112 +1361,133 @@ Get subscriber statistics.
 
 ## Audiences API
 
-### Get All Audiences
+### Base Endpoint: `/api/v1/audiences`
+
+All audiences endpoints require authentication.
+
+---
+
+### 1. Get All Audiences
+
 Retrieve paginated list of audiences.
 
-**Endpoint:** `GET /api/audiences`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `GET /api/v1/audiences`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
 **Query Parameters:**
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| page | number | Page number | 1 |
-| limit | number | Items per page | 20 |
-| search | string | Search in name/description | - |
+| Parameter | Type | Required | Description | Default |
+|-----------|------|----------|-------------|---------|
+| page | number | No | Page number | 1 |
+| limit | number | No | Items per page | 20 |
+| search | string | No | Search in name | - |
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": [
     {
-      "_id": "507f1f77bcf86cd799439031",
+      "_id": "507f1f77bcf86cd799439011",
       "name": "All Subscribers",
-      "description": "All newsletter subscribers",
-      "subscriberCount": 500,
-      "tags": ["newsletter"],
-      "filters": [],
-      "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-02-08T11:40:03.000Z"
+      "description": "Default audience for all subscribers",
+      "subscriberCount": 1000,
+      "tags": ["all"],
+      "createdAt": "2026-02-15T09:22:49.823Z",
+      "updatedAt": "2026-02-15T09:22:49.823Z"
     }
   ],
   "pagination": {
     "page": 1,
     "limit": 20,
-    "total": 5,
-    "totalPages": 1
+    "total": 10,
+    "totalPages": 1,
+    "hasNext": false,
+    "hasPrev": false
   }
 }
 ```
 
 ---
 
-### Get Audience By ID
-Retrieve a single audience.
+### 2. Get Audience By ID
 
-**Endpoint:** `GET /api/audiences/:id`
-**Headers:** `Authorization: Bearer <token>`
+Retrieve a single audience by ID.
 
-**Response (200):**
+**Endpoint:** `GET /api/v1/audiences/:id`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
-    "_id": "507f1f77bcf86cd799439031",
+    "_id": "507f1f77bcf86cd799439011",
     "name": "All Subscribers",
-    "description": "All newsletter subscribers",
-    "subscriberCount": 500,
-    "tags": ["newsletter"],
-    "filters": [],
-    "createdAt": "2026-01-01T00:00:00.000Z",
-    "updatedAt": "2026-02-08T11:40:03.000Z"
+    "description": "Default audience for all subscribers",
+    "subscriberCount": 1000,
+    "tags": ["all"],
+    "conditions": [
+      {
+        "field": "status",
+        "operator": "equals",
+        "value": "active"
+      }
+    ],
+    "createdAt": "2026-02-15T09:22:49.823Z",
+    "updatedAt": "2026-02-15T09:22:49.823Z"
   }
 }
 ```
 
 ---
 
-### Create Audience
+### 3. Create Audience
+
 Create a new audience.
 
-**Endpoint:** `POST /api/audiences`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `POST /api/v1/audiences`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
 {
-  "name": "Premium Subscribers",
-  "description": "Premium tier subscribers",
-  "tags": ["premium"],
-  "filters": [
+  "name": "VIP Customers",
+  "description": "High-value customers",
+  "tags": ["vip", "customers"],
+  "conditions": [
     {
-      "field": "tags",
-      "operator": "contains",
-      "value": "premium"
+      "field": "totalPurchases",
+      "operator": "greater_than",
+      "value": 1000
     }
   ]
 }
 ```
 
-**Response (201):**
+**Response (201 - Created):**
 ```json
 {
   "ok": true,
   "data": {
-    "_id": "507f1f77bcf86cd799439032",
-    "name": "Premium Subscribers",
-    "description": "Premium tier subscribers",
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "VIP Customers",
+    "description": "High-value customers",
     "subscriberCount": 0,
-    "tags": ["premium"],
-    "filters": [
-      {
-        "field": "tags",
-        "operator": "contains",
-        "value": "premium"
-      }
-    ],
-    "createdAt": "2026-02-08T12:00:00.000Z",
-    "updatedAt": "2026-02-08T12:00:00.000Z"
+    "tags": ["vip", "customers"],
+    "createdAt": "2026-02-15T09:22:49.823Z"
   },
   "message": "Audience created successfully"
 }
@@ -1037,59 +1495,48 @@ Create a new audience.
 
 ---
 
-### Update Audience
+### 4. Update Audience
+
 Update an existing audience.
 
-**Endpoint:** `PUT /api/audiences/:id`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `PUT /api/v1/audiences/:id`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
 {
-  "name": "VIP Subscribers",
-  "description": "VIP tier subscribers",
-  "filters": [
-    {
-      "field": "tags",
-      "operator": "contains",
-      "value": "vip"
-    }
-  ]
+  "name": "VIP Customers - Updated",
+  "description": "Updated description"
 }
 ```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439032",
-    "name": "VIP Subscribers",
-    "description": "VIP tier subscribers",
-    "subscriberCount": 0,
-    "tags": ["vip"],
-    "filters": [
-      {
-        "field": "tags",
-        "operator": "contains",
-        "value": "vip"
-      }
-    ],
-    "updatedAt": "2026-02-08T12:30:00.000Z"
-  },
   "message": "Audience updated successfully"
 }
 ```
 
 ---
 
-### Delete Audience
+### 5. Delete Audience
+
 Delete an audience.
 
-**Endpoint:** `DELETE /api/audiences/:id`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `DELETE /api/v1/audiences/:id`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -1099,46 +1546,58 @@ Delete an audience.
 
 ---
 
-### Add Subscribers to Audience
-Add subscribers to an audience by IDs.
+### 6. Add Subscribers to Audience
 
-**Endpoint:** `POST /api/audiences/:id/subscribers`
-**Headers:** `Authorization: Bearer <token>`
+Add subscribers to an audience.
+
+**Endpoint:** `POST /api/v1/audiences/:id/subscribers`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
 {
   "subscriberIds": [
-    "507f1f77bcf86cd799439021",
-    "507f1f77bcf86cd799439022",
-    "507f1f77bcf86cd799439023"
+    "507f1f77bcf86cd799439011",
+    "507f1f77bcf86cd799439012"
   ]
 }
 ```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
-  "message": "Subscribers added successfully",
-  "subscriberCount": 503
+  "message": "2 subscribers added to audience"
 }
 ```
 
 ---
 
-### Sync Audience Subscribers
-Sync audience subscriber count.
+### 7. Sync Audience Subscribers
 
-**Endpoint:** `POST /api/audiences/:id/sync`
-**Headers:** `Authorization: Bearer <token>`
+Sync audience with conditions.
 
-**Response (200):**
+**Endpoint:** `POST /api/v1/audiences/:id/sync`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
-  "message": "Audience synced",
-  "subscriberCount": 510
+  "message": "Audience synced successfully",
+  "data": {
+    "added": 10,
+    "removed": 5
+  }
 }
 ```
 
@@ -1146,134 +1605,124 @@ Sync audience subscriber count.
 
 ## Templates API
 
-### Get All Templates
+### Base Endpoint: `/api/v1/templates`
+
+All templates endpoints require authentication.
+
+---
+
+### 1. Get All Templates
+
 Retrieve paginated list of templates.
 
-**Endpoint:** `GET /api/templates`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `GET /api/v1/templates`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
 **Query Parameters:**
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| page | number | Page number | 1 |
-| limit | number | Items per page | 20 |
-| category | string | Filter by category | - |
-| search | string | Search in name/subject | - |
+| Parameter | Type | Required | Description | Default |
+|-----------|------|----------|-------------|---------|
+| page | number | No | Page number | 1 |
+| limit | number | No | Items per page | 20 |
+| search | string | No | Search in name/subject | - |
+| category | string | No | Filter by category | - |
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": [
     {
-      "_id": "507f1f77bcf86cd799439041",
-      "name": "Welcome Email",
-      "subject": "Welcome to our newsletter!",
-      "body": "<html><body><h1>Welcome {{firstName}}!</h1>...</body></html>",
+      "_id": "507f1f77bcf86cd799439011",
+      "name": "Welcome Template",
+      "subject": "Welcome, {{firstName}}!",
       "category": "welcome",
-      "thumbnail": "https://example.com/thumbnails/welcome.png",
-      "isDefault": false,
-      "variables": ["firstName", "lastName"],
-      "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-02-08T11:40:03.000Z"
+      "thumbnail": "https://example.com/thumbnails/welcome.jpg",
+      "createdAt": "2026-02-15T09:22:49.823Z",
+      "updatedAt": "2026-02-15T09:22:49.823Z"
     }
   ],
   "pagination": {
     "page": 1,
     "limit": 20,
-    "total": 10,
-    "totalPages": 1
+    "total": 25,
+    "totalPages": 2,
+    "hasNext": true,
+    "hasPrev": false
   }
 }
 ```
 
 ---
 
-### Get Template By ID
-Retrieve a single template.
+### 2. Get Template By ID
 
-**Endpoint:** `GET /api/templates/:id`
-**Headers:** `Authorization: Bearer <token>`
+Retrieve a single template by ID.
 
-**Response (200):**
+**Endpoint:** `GET /api/v1/templates/:id`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
-    "_id": "507f1f77bcf86cd799439041",
-    "name": "Welcome Email",
-    "subject": "Welcome to our newsletter!",
-    "body": "<html><body><h1>Welcome {{firstName}}!</h1><p>Thank you for joining...</p></body></html>",
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "Welcome Template",
+    "subject": "Welcome, {{firstName}}!",
+    "body": "<html><body><h1>Welcome {{firstName}}!</h1></body></html>",
     "category": "welcome",
-    "thumbnail": "https://example.com/thumbnails/welcome.png",
-    "isDefault": false,
-    "variables": ["firstName", "lastName"],
-    "createdAt": "2026-01-01T00:00:00.000Z",
-    "updatedAt": "2026-02-08T11:40:03.000Z"
+    "thumbnail": "https://example.com/thumbnails/welcome.jpg",
+    "variables": ["firstName", "lastName", "company"],
+    "createdAt": "2026-02-15T09:22:49.823Z",
+    "updatedAt": "2026-02-15T09:22:49.823Z"
   }
 }
 ```
 
 ---
 
-### Get Default Templates
-Get system default templates.
+### 3. Create Template
 
-**Endpoint:** `GET /api/templates/default`
-**Headers:** `Authorization: Bearer <token>`
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": [
-    {
-      "_id": "507f1f77bcf86cd799439042",
-      "name": "Default Welcome",
-      "subject": "Welcome!",
-      "body": "<html><body>...</body></html>",
-      "category": "welcome",
-      "isDefault": true
-    }
-  ]
-}
-```
-
----
-
-### Create Template
 Create a new template.
 
-**Endpoint:** `POST /api/templates`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `POST /api/v1/templates`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
 {
-  "name": "Monthly Newsletter",
-  "subject": "Your Monthly Update - {{month}}",
-  "body": "<html><body><h1>Monthly Newsletter</h1><p>Hello {{firstName}},</p>...</body></html>",
-  "category": "newsletter",
-  "thumbnail": "https://example.com/thumbnails/newsletter.png",
-  "isDefault": false,
-  "variables": ["firstName", "month"]
+  "name": "Summer Sale Template",
+  "subject": "🔥 Summer Sale - {{discount}}% Off!",
+  "body": "<html><body><h1>Summer Sale!</h1><p>Get {{discount}}% off!</p></body></html>",
+  "category": "promotional",
+  "thumbnail": "https://example.com/thumbnails/summer.jpg",
+  "variables": ["discount", "firstName"]
 }
 ```
 
-**Response (201):**
+**Response (201 - Created):**
 ```json
 {
   "ok": true,
   "data": {
-    "_id": "507f1f77bcf86cd799439043",
-    "name": "Monthly Newsletter",
-    "subject": "Your Monthly Update - {{month}}",
-    "body": "<html><body><h1>Monthly Newsletter</h1><p>Hello {{firstName}},</p>...</body></html>",
-    "category": "newsletter",
-    "isDefault": false,
-    "variables": ["firstName", "month"],
-    "createdAt": "2026-02-08T12:00:00.000Z",
-    "updatedAt": "2026-02-08T12:00:00.000Z"
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "Summer Sale Template",
+    "subject": "🔥 Summer Sale - {{discount}}% Off!",
+    "category": "promotional",
+    "createdAt": "2026-02-15T09:22:49.823Z"
   },
   "message": "Template created successfully"
 }
@@ -1281,47 +1730,48 @@ Create a new template.
 
 ---
 
-### Update Template
+### 4. Update Template
+
 Update an existing template.
 
-**Endpoint:** `PUT /api/templates/:id`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `PUT /api/v1/templates/:id`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
 {
-  "name": "Updated Monthly Newsletter",
-  "subject": "Your {{month}} Update",
-  "body": "<html><body><h1>Updated Newsletter</h1>...</body></html>",
-  "variables": ["firstName", "month", "year"]
+  "name": "Updated Summer Sale Template",
+  "subject": "🎉 Extra {{extraDiscount}}% Off!"
 }
 ```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439043",
-    "name": "Updated Monthly Newsletter",
-    "subject": "Your {{month}} Update",
-    "body": "<html><body><h1>Updated Newsletter</h1>...</body></html>",
-    "variables": ["firstName", "month", "year"],
-    "updatedAt": "2026-02-08T12:30:00.000Z"
-  },
   "message": "Template updated successfully"
 }
 ```
 
 ---
 
-### Delete Template
+### 5. Delete Template
+
 Delete a template.
 
-**Endpoint:** `DELETE /api/templates/:id`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:** `DELETE /api/v1/templates/:id`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -1333,41 +1783,34 @@ Delete a template.
 
 ## Tags API
 
-### Get All Tags
-Retrieve all tags for the user.
+### Base Endpoint: `/api/tags`
+
+All tags endpoints require authentication.
+
+---
+
+### 1. Get All Tags
+
+Retrieve all tags.
 
 **Endpoint:** `GET /api/tags`
-**Headers:** `Authorization: Bearer <token>`
 
-**Query Parameters:**
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| search | string | Search in name/slug |
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": [
     {
-      "_id": "507f1f77bcf86cd799439051",
+      "_id": "507f1f77bcf86cd799439011",
       "name": "newsletter",
-      "slug": "newsletter",
-      "color": "#3498db",
-      "description": "Newsletter subscribers",
       "subscriberCount": 500,
-      "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-02-08T11:40:03.000Z"
-    },
-    {
-      "_id": "507f1f77bcf86cd799439052",
-      "name": "premium",
-      "slug": "premium",
-      "color": "#e74c3c",
-      "description": "Premium subscribers",
-      "subscriberCount": 100,
-      "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-02-08T11:40:03.000Z"
+      "color": "#3498db",
+      "createdAt": "2026-02-15T09:22:49.823Z"
     }
   ]
 }
@@ -1375,59 +1818,62 @@ Retrieve all tags for the user.
 
 ---
 
-### Get Tag By ID
-Retrieve a single tag.
+### 2. Get Tag By ID
+
+Retrieve a single tag by ID.
 
 **Endpoint:** `GET /api/tags/:id`
-**Headers:** `Authorization: Bearer <token>`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
-    "_id": "507f1f77bcf86cd799439051",
+    "_id": "507f1f77bcf86cd799439011",
     "name": "newsletter",
-    "slug": "newsletter",
-    "color": "#3498db",
-    "description": "Newsletter subscribers",
     "subscriberCount": 500,
-    "createdAt": "2026-01-01T00:00:00.000Z",
-    "updatedAt": "2026-02-08T11:40:03.000Z"
+    "color": "#3498db"
   }
 }
 ```
 
 ---
 
-### Create Tag
+### 3. Create Tag
+
 Create a new tag.
 
 **Endpoint:** `POST /api/tags`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
 {
-  "name": "Summer Sale 2026",
-  "color": "#2ecc71",
-  "description": "Subscribers interested in summer sale"
+  "name": "vip",
+  "color": "#e74c3c"
 }
 ```
 
-**Response (201):**
+**Response (201 - Created):**
 ```json
 {
   "ok": true,
   "data": {
-    "_id": "507f1f77bcf86cd799439053",
-    "name": "Summer Sale 2026",
-    "slug": "summer-sale-2026",
-    "color": "#2ecc71",
-    "description": "Subscribers interested in summer sale",
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "vip",
+    "color": "#e74c3c",
     "subscriberCount": 0,
-    "createdAt": "2026-02-08T12:00:00.000Z",
-    "updatedAt": "2026-02-08T12:00:00.000Z"
+    "createdAt": "2026-02-15T09:22:49.823Z"
   },
   "message": "Tag created successfully"
 }
@@ -1435,47 +1881,48 @@ Create a new tag.
 
 ---
 
-### Update Tag
+### 4. Update Tag
+
 Update an existing tag.
 
 **Endpoint:** `PUT /api/tags/:id`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
 {
-  "name": "Summer Sale",
-  "color": "#27ae60",
-  "description": "Summer sale subscribers"
+  "name": "vip-updated",
+  "color": "#9b59b6"
 }
 ```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439053",
-    "name": "Summer Sale",
-    "slug": "summer-sale",
-    "color": "#27ae60",
-    "description": "Summer sale subscribers",
-    "subscriberCount": 0,
-    "updatedAt": "2026-02-08T12:30:00.000Z"
-  },
   "message": "Tag updated successfully"
 }
 ```
 
 ---
 
-### Delete Tag
+### 5. Delete Tag
+
 Delete a tag.
 
 **Endpoint:** `DELETE /api/tags/:id`
-**Headers:** `Authorization: Bearer <token>`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -1485,28 +1932,34 @@ Delete a tag.
 
 ---
 
-### Merge Tags
+### 6. Merge Tags
+
 Merge multiple tags into one.
 
 **Endpoint:** `POST /api/tags/merge`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
 {
-  "sourceTagIds": [
-    "507f1f77bcf86cd799439051",
-    "507f1f77bcf86cd799439052"
-  ],
-  "targetTagId": "507f1f77bcf86cd799439053"
+  "sourceTagIds": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"],
+  "targetTagId": "507f1f77bcf86cd799439013"
 }
 ```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
-  "message": "Tags merged successfully"
+  "message": "Tags merged successfully",
+  "data": {
+    "mergedCount": 50
+  }
 }
 ```
 
@@ -1514,38 +1967,49 @@ Merge multiple tags into one.
 
 ## Analytics API
 
-### Get Overall Analytics
-Get overall campaign analytics.
+### Base Endpoint: `/api/analytics`
+
+All analytics endpoints require authentication.
+
+---
+
+### 1. Get Overall Analytics
+
+Get overall email campaign analytics.
 
 **Endpoint:** `GET /api/analytics`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
 **Query Parameters:**
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| startDate | string | Start date (ISO 8601) |
-| endDate | string | End date (ISO 8601) |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| startDate | string | No | Start date (ISO) |
+| endDate | string | No | End date (ISO) |
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
-    "totalCampaigns": 50,
-    "totals": {
-      "sent": 50000,
-      "delivered": 49000,
-      "opened": 12250,
-      "clicked": 3675,
-      "bounced": 1000,
-      "unsubscribed": 245,
-      "complained": 10
+    "overview": {
+      "totalCampaigns": 50,
+      "totalSent": 50000,
+      "totalDelivered": 49000,
+      "totalOpened": 20000,
+      "totalClicked": 8000,
+      "totalBounced": 1000,
+      "totalUnsubscribed": 200
     },
     "rates": {
-      "openRate": "25.00",
-      "clickRate": "30.00",
-      "bounceRate": "2.00",
-      "unsubscribeRate": "0.50"
+      "deliveryRate": 98.0,
+      "openRate": 40.8,
+      "clickRate": 16.3,
+      "bounceRate": 2.0,
+      "unsubscribeRate": 0.4
     }
   }
 }
@@ -1553,39 +2017,31 @@ Get overall campaign analytics.
 
 ---
 
-### Get Campaign Analytics
+### 2. Get Analytics By Campaign
+
 Get analytics for a specific campaign.
 
-**Endpoint:** `GET /api/analytics/campaign/:id`
-**Headers:** `Authorization: Bearer <token>`
+**Endpoint:**/analytics/campaign `GET /api/:id`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
-    "campaign": {
-      "id": "507f1f77bcf86cd799439011",
-      "name": "Summer Sale Campaign",
-      "subject": "🔥 Don't Miss Our Summer Sale!",
-      "status": "completed",
-      "createdAt": "2026-02-08T11:40:03.000Z",
-      "sentAt": "2026-02-08T11:45:00.000Z"
-    },
+    "campaignId": "507f1f77bcf86cd799439011",
+    "campaignName": "Summer Sale",
     "stats": {
-      "sent": 1000,
-      "delivered": 980,
-      "opened": 245,
-      "clicked": 98,
-      "bounced": 20,
-      "unsubscribed": 5,
-      "complained": 0
-    },
-    "rates": {
-      "openRate": "25.00",
-      "clickRate": "40.00",
-      "bounceRate": "2.04",
-      "unsubscribeRate": "0.51"
+      "sent": 10000,
+      "delivered": 9800,
+      "opened": 4500,
+      "clicked": 1500,
+      "bounced": 200,
+      "unsubscribed": 50
     }
   }
 }
@@ -1593,41 +2049,36 @@ Get analytics for a specific campaign.
 
 ---
 
-### Get Time Series Analytics
+### 3. Get Time Series Analytics
+
 Get analytics over time.
 
 **Endpoint:** `GET /api/analytics/timeseries`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
 **Query Parameters:**
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| startDate | string | Start date (ISO 8601) |
-| endDate | string | End date (ISO 8601) |
-| granularity | string | day or week |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| startDate | string | Yes | Start date (ISO) |
+| endDate | string | Yes | End date (ISO) |
+| interval | string | No | daily/weekly/monthly |
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": [
     {
-      "_id": "2026-02-01",
-      "campaigns": 2,
-      "sent": 2000,
-      "opened": 500,
-      "clicked": 150,
-      "bounced": 20,
-      "unsubscribed": 5
-    },
-    {
-      "_id": "2026-02-02",
-      "campaigns": 1,
+      "date": "2026-02-01",
       "sent": 1000,
-      "opened": 250,
-      "clicked": 75,
-      "bounced": 10,
-      "unsubscribed": 2
+      "delivered": 980,
+      "opened": 400,
+      "clicked": 100,
+      "bounced": 20
     }
   ]
 }
@@ -1635,38 +2086,36 @@ Get analytics over time.
 
 ---
 
-### Get Top Campaigns
+### 4. Get Top Campaigns
+
 Get top performing campaigns.
 
 **Endpoint:** `GET /api/analytics/top-campaigns`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
 **Query Parameters:**
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| limit | number | Number of campaigns | 10 |
-| metric | string | openRate or clickRate | openRate |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| limit | number | No | Number of campaigns (default 10) |
+| sortBy | string | No | opens/clicks/conversions |
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": [
     {
       "_id": "507f1f77bcf86cd799439011",
-      "name": "Welcome Email",
-      "subject": "Welcome!",
-      "stats": {
-        "sent": 1000,
-        "delivered": 990,
-        "opened": 495,
-        "clicked": 198
-      },
-      "createdAt": "2026-01-15T00:00:00.000Z",
-      "rates": {
-        "openRate": "50.00",
-        "clickRate": "40.00"
-      }
+      "name": "Welcome Campaign",
+      "sent": 10000,
+      "opened": 5000,
+      "clicked": 2000,
+      "openRate": 50.0,
+      "clickRate": 20.0
     }
   ]
 }
@@ -1674,46 +2123,27 @@ Get top performing campaigns.
 
 ---
 
-### Get Engagement Metrics
-Get subscriber engagement metrics.
+### 5. Get Engagement Metrics
+
+Get engagement metrics.
 
 **Endpoint:** `GET /api/analytics/engagement`
-**Headers:** `Authorization: Bearer <token>`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
-    "engagementBreakdown": [
-      {
-        "_id": 0,
-        "count": 100,
-        "avgClicks": 0
-      },
-      {
-        "_id": 1,
-        "count": 200,
-        "avgClicks": 1
-      },
-      {
-        "_id": 5,
-        "count": 150,
-        "avgClicks": 5
-      }
-    ],
-    "bestHours": [
-      {
-        "_id": 9,
-        "avgOpenRate": 0.45,
-        "totalSent": 5000
-      },
-      {
-        "_id": 10,
-        "avgOpenRate": 0.42,
-        "totalSent": 8000
-      }
-    ]
+    "activeSubscribers": 850,
+    "engagedLast30Days": 600,
+    "engagedLast90Days": 750,
+    "churnRate": 2.5,
+    "reEngagementRate": 5.0
   }
 }
 ```
@@ -1722,89 +2152,48 @@ Get subscriber engagement metrics.
 
 ## Dashboard API
 
-### Get Dashboard Data
-Get dashboard overview data.
+### Base Endpoint: `/api/dashboard`
+
+All dashboard endpoints require authentication.
+
+---
+
+### 1. Get Dashboard
+
+Get dashboard overview.
 
 **Endpoint:** `GET /api/dashboard`
-**Headers:** `Authorization: Bearer <token>`
 
-**Query Parameters:**
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| period | string | Time period (e.g., 7d, 30d, 90d) | 30d |
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
     "overview": {
+      "totalSubscribers": 1000,
       "totalCampaigns": 50,
-      "activeCampaigns": 2,
-      "totalSubscribers": 500,
-      "activeSubscribers": 450,
-      "totalAudiences": 5,
-      "totalTemplates": 10,
-      "totalTags": 15
-    },
-    "emailMetrics": {
-      "totalSent": 50000,
-      "totalOpened": 12250,
-      "totalClicked": 3675,
-      "totalBounced": 1000,
-      "totalUnsubscribed": 245,
-      "rates": {
-        "openRate": "25.00",
-        "clickRate": "30.00",
-        "bounceRate": "2.00",
-        "unsubscribeRate": "0.50"
-      }
+      "totalAudiences": 10,
+      "sentThisMonth": 5000
     },
     "recentCampaigns": [
       {
         "_id": "507f1f77bcf86cd799439011",
         "name": "Summer Sale",
-        "status": "completed",
-        "createdAt": "2026-02-08T11:40:03.000Z",
-        "stats": {
-          "sent": 1000,
-          "opened": 250
-        }
+        "status": "sent",
+        "sent": 1000,
+        "opened": 400
       }
     ],
-    "recentSubscribers": [
+    "recentActivity": [
       {
-        "_id": "507f1f77bcf86cd799439021",
-        "email": "john@example.com",
-        "firstName": "John",
-        "lastName": "Doe",
-        "status": "active",
-        "createdAt": "2026-02-08T10:00:00.000Z"
-      }
-    ],
-    "topTags": [
-      {
-        "_id": "507f1f77bcf86cd799439051",
-        "name": "newsletter",
-        "subscriberCount": 500,
-        "color": "#3498db"
-      }
-    ],
-    "campaignsByStatus": {
-      "draft": 10,
-      "scheduled": 5,
-      "sending": 2,
-      "completed": 30,
-      "paused": 3
-    },
-    "subscriberGrowth": [
-      {
-        "_id": "2026-02-01",
-        "count": 10
-      },
-      {
-        "_id": "2026-02-02",
-        "count": 15
+        "action": "Campaign sent",
+        "campaign": "Summer Sale",
+        "timestamp": "2026-02-15T09:22:49.823Z"
       }
     ]
   }
@@ -1813,21 +2202,23 @@ Get dashboard overview data.
 
 ---
 
-### Get Campaign Performance
-Get campaign performance data.
+### 2. Get Campaign Performance
+
+Get campaign performance metrics.
 
 **Endpoint:** `GET /api/dashboard/campaigns`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
 **Query Parameters:**
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| page | number | Page number | 1 |
-| limit | number | Items per page | 20 |
-| sortBy | string | Sort field | createdAt |
-| sortOrder | string | asc or desc | desc |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| limit | number | No | Number of campaigns |
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -1835,21 +2226,375 @@ Get campaign performance data.
     {
       "_id": "507f1f77bcf86cd799439011",
       "name": "Summer Sale",
-      "subject": "🔥 Don't Miss Our Summer Sale!",
-      "status": "completed",
-      "createdAt": "2026-02-08T11:40:03.000Z",
-      "stats": {
-        "sent": 1000,
-        "delivered": 980,
-        "opened": 245,
-        "clicked": 98,
-        "bounced": 20,
-        "unsubscribed": 5
-      },
-      "rates": {
-        "openRate": "25.00",
-        "clickRate": "40.00"
+      "type": "promotional",
+      "sent": 1000,
+      "delivered": 980,
+      "opened": 400,
+      "clicked": 100,
+      "bounced": 20
+    }
+  ]
+}
+```
+
+---
+
+### 3. Get Subscriber Analytics
+
+Get subscriber analytics.
+
+**Endpoint:** `GET /api/dashboard/subscribers`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "data": {
+    "total": 1000,
+    "growth": {
+      "thisMonth": 50,
+      "lastMonth": 30,
+      "percentage": 66.7
+    },
+    "byStatus": {
+      "active": 850,
+      "unsubscribed": 100,
+      "cleaned": 50
+    }
+  }
+}
+```
+
+---
+
+## Settings API
+
+### Base Endpoint: `/api/settings`
+
+All settings endpoints require authentication.
+
+---
+
+### 1. Get Profile
+
+Get user profile.
+
+**Endpoint:** `GET /api/settings/profile`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "data": {
+    "name": "John Doe",
+    "email": "john@example.com",
+    "phone": "+1234567890",
+    "company": "Acme Inc",
+    "timezone": "UTC",
+    "avatar": "https://example.com/avatars/john.jpg"
+  }
+}
+```
+
+---
+
+### 2. Update Profile
+
+Update user profile.
+
+**Endpoint:** `PUT /api/settings/profile`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "name": "John Updated",
+  "phone": "+9876543210",
+  "company": "New Company",
+  "timezone": "America/New_York"
+}
+```
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "message": "Profile updated successfully"
+}
+```
+
+---
+
+### 3. Get Notification Settings
+
+Get notification preferences.
+
+**Endpoint:** `GET /api/settings/notifications`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "data": {
+    "email": true,
+    "push": true,
+    "sms": false,
+    "campaignReports": true,
+    "weeklyDigest": true,
+    "productUpdates": false
+  }
+}
+```
+
+---
+
+### 4. Update Notification Settings
+
+Update notification preferences.
+
+**Endpoint:** `PUT /api/settings/notifications`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "email": true,
+  "push": true,
+  "sms": true,
+  "campaignReports": true,
+  "weeklyDigest": false,
+  "productUpdates": true
+}
+```
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "message": "Notification settings updated successfully"
+}
+```
+
+---
+
+### 5. Get Security Settings
+
+Get security settings.
+
+**Endpoint:** `GET /api/settings/security`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "data": {
+    "twoFactorEnabled": false,
+    "lastPasswordChange": "2026-01-15T09:22:49.823Z",
+    "loginHistory": [
+      {
+        "ip": "192.168.1.1",
+        "location": "New York, US",
+        "timestamp": "2026-02-15T09:22:49.823Z",
+        "device": "Chrome on Windows"
       }
+    ]
+  }
+}
+```
+
+---
+
+### 6. Update Password
+
+Update user password.
+
+**Endpoint:** `PUT /api/settings/password`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "currentPassword": "oldPassword123",
+  "newPassword": "newPassword456"
+}
+```
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "message": "Password updated successfully"
+}
+```
+
+---
+
+### 7. Update Security Settings
+
+Update security settings.
+
+**Endpoint:** `PUT /api/settings/security`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "twoFactorEnabled": true
+}
+```
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "message": "Security settings updated successfully"
+}
+```
+
+---
+
+### 8. Get All Settings
+
+Get all user settings.
+
+**Endpoint:** `GET /api/settings`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "data": {
+    "profile": {
+      "name": "John Doe",
+      "email": "john@example.com"
+    },
+    "notifications": {
+      "email": true,
+      "push": true
+    },
+    "security": {
+      "twoFactorEnabled": false
+    }
+  }
+}
+```
+
+---
+
+### 9. Update All Settings
+
+Update all user settings at once.
+
+**Endpoint:** `PUT /api/settings`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "profile": {
+    "name": "John Updated",
+    "phone": "+9876543210"
+  },
+  "notifications": {
+    "email": true,
+    "push": false
+  }
+}
+```
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "message": "Settings updated successfully"
+}
+```
+
+---
+
+## User Management API
+
+### Base Endpoint: `/api/users`
+
+All user management endpoints require authentication and admin role.
+
+---
+
+### 1. Get All Users
+
+Retrieve paginated list of users (Admin only).
+
+**Endpoint:** `GET /api/users`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "data": [
+    {
+      "_id": "507f1f77bcf86cd799439011",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "role": "user",
+      "isActive": true,
+      "isEmailVerified": true,
+      "trialEndsAt": "2026-03-15T09:22:49.823Z",
+      "createdAt": "2026-01-01T09:22:49.823Z"
     }
   ],
   "pagination": {
@@ -1863,393 +2608,48 @@ Get campaign performance data.
 
 ---
 
-### Get Subscriber Analytics
-Get subscriber analytics data.
+### 2. Get User By ID
 
-**Endpoint:** `GET /api/dashboard/subscribers`
-**Headers:** `Authorization: Bearer <token>`
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": {
-    "summary": {
-      "total": 500,
-      "active": 450,
-      "unsubscribed": 30,
-      "bounced": 20,
-      "complained": 0,
-      "activeRate": "90.00"
-    },
-    "growthData": [
-      {
-        "_id": "2026-02-01",
-        "count": 10
-      },
-      {
-        "_id": "2026-02-02",
-        "count": 15
-      }
-    ],
-    "sourceBreakdown": [
-      {
-        "_id": "manual",
-        "count": 200
-      },
-      {
-        "_id": "import",
-        "count": 250
-      },
-      {
-        "_id": "landing_page",
-        "count": 50
-      }
-    ]
-  }
-}
-```
-
----
-
-## Settings API
-
-### Get Profile
-Get user profile.
-
-**Endpoint:** `GET /api/settings/profile`
-**Headers:** `Authorization: Bearer <token>`
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": {
-    "user": {
-      "id": "507f1f77bcf86cd799439001",
-      "name": "John Doe",
-      "email": "john@example.com",
-      "phone": "+1234567890",
-      "company": "Acme Inc",
-      "timezone": "UTC",
-      "avatar": null,
-      "createdAt": "2026-01-01T00:00:00.000Z"
-    },
-    "settings": {}
-  }
-}
-```
-
----
-
-### Update Profile
-Update user profile.
-
-**Endpoint:** `PUT /api/settings/profile`
-**Headers:** `Authorization: Bearer <token>`
-
-**Request Body:**
-```json
-{
-  "name": "John Updated",
-  "phone": "+1987654321",
-  "company": "New Company",
-  "timezone": "America/New_York",
-  "avatar": "https://example.com/avatar.jpg"
-}
-```
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439001",
-    "name": "John Updated",
-    "email": "john@example.com",
-    "phone": "+1987654321",
-    "company": "New Company",
-    "timezone": "America/New_York",
-    "avatar": "https://example.com/avatar.jpg"
-  },
-  "message": "Profile updated successfully"
-}
-```
-
----
-
-### Get Notification Settings
-Get notification preferences.
-
-**Endpoint:** `GET /api/settings/notifications`
-**Headers:** `Authorization: Bearer <token>`
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": {
-    "emailCampaignReports": true,
-    "subscriberActivity": true,
-    "systemUpdates": true,
-    "marketingEmails": false
-  }
-}
-```
-
----
-
-### Update Notification Settings
-Update notification preferences.
-
-**Endpoint:** `PUT /api/settings/notifications`
-**Headers:** `Authorization: Bearer <token>`
-
-**Request Body:**
-```json
-{
-  "emailCampaignReports": true,
-  "subscriberActivity": false,
-  "systemUpdates": true,
-  "marketingEmails": false
-}
-```
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": {
-    "emailCampaignReports": true,
-    "subscriberActivity": false,
-    "systemUpdates": true,
-    "marketingEmails": false
-  },
-  "message": "Notification settings updated"
-}
-```
-
----
-
-### Get Security Settings
-Get security settings.
-
-**Endpoint:** `GET /api/settings/security`
-**Headers:** `Authorization: Bearer <token>`
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": {
-    "twoFactorEnabled": false,
-    "loginAlerts": true,
-    "lastPasswordChange": "2026-01-01T00:00:00.000Z"
-  }
-}
-```
-
----
-
-### Update Password
-Update account password.
-
-**Endpoint:** `PUT /api/settings/password`
-**Headers:** `Authorization: Bearer <token>`
-
-**Request Body:**
-```json
-{
-  "currentPassword": "oldPassword123",
-  "newPassword": "newSecurePassword456"
-}
-```
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "message": "Password updated successfully"
-}
-```
-
----
-
-### Update Security Settings
-Update security preferences.
-
-**Endpoint:** `PUT /api/settings/security`
-**Headers:** `Authorization: Bearer <token>`
-
-**Request Body:**
-```json
-{
-  "loginAlerts": false
-}
-```
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "message": "Security settings updated"
-}
-```
-
----
-
-### Get All Settings
-Get all settings at once.
-
-**Endpoint:** `GET /api/settings`
-**Headers:** `Authorization: Bearer <token>`
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": {
-    "profile": {
-      "id": "507f1f77bcf86cd799439001",
-      "name": "John Doe",
-      "email": "john@example.com",
-      "phone": "+1234567890",
-      "company": "Acme Inc",
-      "timezone": "UTC",
-      "avatar": null
-    },
-    "notifications": {
-      "emailCampaignReports": true,
-      "subscriberActivity": true,
-      "systemUpdates": true,
-      "marketingEmails": false
-    },
-    "security": {
-      "twoFactorEnabled": false,
-      "loginAlerts": true,
-      "lastPasswordChange": "2026-01-01T00:00:00.000Z"
-    },
-    "preferences": {}
-  }
-}
-```
-
----
-
-### Update All Settings
-Update all settings at once.
-
-**Endpoint:** `PUT /api/settings`
-**Headers:** `Authorization: Bearer <token>`
-
-**Request Body:**
-```json
-{
-  "profile": {
-    "name": "John Updated",
-    "phone": "+1987654321",
-    "company": "New Company"
-  },
-  "notifications": {
-    "emailCampaignReports": true,
-    "subscriberActivity": false
-  },
-  "preferences": {
-    "theme": "dark"
-  }
-}
-```
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "message": "Settings updated successfully"
-}
-```
-
----
-
-## User Management API (Admin Only)
-
-### Get All Users
-Get paginated list of users.
-
-**Endpoint:** `GET /api/users`
-**Headers:** `Authorization: Bearer <token>`
-
-**Query Parameters:**
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| page | number | Page number | 1 |
-| limit | number | Items per page | 20 |
-| search | string | Search in name/email | - |
-| role | string | Filter by role | - |
-| isActive | boolean | Filter by active status | - |
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": [
-    {
-      "_id": "507f1f77bcf86cd799439001",
-      "name": "John Doe",
-      "email": "john@example.com",
-      "role": "user",
-      "isActive": true,
-      "isEmailVerified": true,
-      "createdAt": "2026-01-01T00:00:00.000Z",
-      "lastLoginAt": "2026-02-08T11:40:03.000Z"
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 100,
-    "totalPages": 5
-  }
-}
-```
-
----
-
-### Get User By ID
-Get a specific user.
+Retrieve a single user by ID (Admin only).
 
 **Endpoint:** `GET /api/users/:id`
-**Headers:** `Authorization: Bearer <token>`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
-    "_id": "507f1f77bcf86cd799439001",
+    "_id": "507f1f77bcf86cd799439011",
     "name": "John Doe",
     "email": "john@example.com",
     "role": "user",
     "isActive": true,
     "isEmailVerified": true,
-    "phone": "+1234567890",
-    "company": "Acme Inc",
-    "createdAt": "2026-01-01T00:00:00.000Z",
-    "lastLoginAt": "2026-02-08T11:40:03.000Z",
-    "stats": {
-      "campaigns": 10,
-      "subscribers": 500
-    }
+    "trialEndsAt": "2026-03-15T09:22:49.823Z",
+    "lastLoginAt": "2026-02-15T09:22:49.823Z",
+    "createdAt": "2026-01-01T09:22:49.823Z"
   }
 }
 ```
 
 ---
 
-### Create User
-Create a new user.
+### 3. Create User
+
+Create a new user (Admin only).
 
 **Endpoint:** `POST /api/users`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
@@ -2257,21 +2657,19 @@ Create a new user.
   "name": "Jane Smith",
   "email": "jane@example.com",
   "password": "securePassword123",
-  "role": "admin",
-  "phone": "+1234567890",
-  "company": "Tech Corp"
+  "role": "user"
 }
 ```
 
-**Response (201):**
+**Response (201 - Created):**
 ```json
 {
   "ok": true,
   "data": {
-    "id": "507f1f77bcf86cd799439002",
+    "_id": "507f1f77bcf86cd799439011",
     "name": "Jane Smith",
     "email": "jane@example.com",
-    "role": "admin"
+    "role": "user"
   },
   "message": "User created successfully"
 }
@@ -2279,53 +2677,49 @@ Create a new user.
 
 ---
 
-### Update User
-Update an existing user.
+### 4. Update User
+
+Update an existing user (Admin only).
 
 **Endpoint:** `PUT /api/users/:id`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
 {
   "name": "Jane Updated",
-  "email": "jane.updated@example.com",
   "role": "admin",
-  "isActive": true,
-  "phone": "+1987654321",
-  "company": "New Tech Corp"
+  "isActive": false
 }
 ```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439002",
-    "name": "Jane Updated",
-    "email": "jane.updated@example.com",
-    "role": "admin",
-    "isActive": true
-  },
   "message": "User updated successfully"
 }
 ```
 
 ---
 
-### Delete User
-Delete a user.
+### 5. Delete User
+
+Delete a user (Admin only).
 
 **Endpoint:** `DELETE /api/users/:id`
-**Headers:** `Authorization: Bearer <token>`
 
-**Query Parameters:**
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| deleteData | string | Set to "true" to delete all user data |
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -2335,11 +2729,17 @@ Delete a user.
 
 ---
 
-### Reset User Password
-Reset a user's password.
+### 6. Reset User Password
+
+Reset a user's password (Admin only).
 
 **Endpoint:** `POST /api/users/:id/reset-password`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+Content-Type: application/json
+```
 
 **Request Body:**
 ```json
@@ -2348,7 +2748,7 @@ Reset a user's password.
 }
 ```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
@@ -2358,37 +2758,30 @@ Reset a user's password.
 
 ---
 
-### Get User Stats
-Get user statistics.
+### 7. Get User Stats
+
+Get user statistics (Admin only).
 
 **Endpoint:** `GET /api/users/stats`
-**Headers:** `Authorization: Bearer <token>`
 
-**Response (200):**
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": {
-    "summary": {
-      "total": 100,
-      "active": 90,
-      "admins": 5,
-      "verified": 80
-    },
-    "roleDistribution": {
-      "user": 95,
-      "admin": 4,
-      "superadmin": 1
-    },
-    "recentRegistrations": [
-      {
-        "_id": "507f1f77bcf86cd799439099",
-        "name": "New User",
-        "email": "new@example.com",
-        "role": "user",
-        "createdAt": "2026-02-08T12:00:00.000Z"
-      }
-    ]
+    "total": 50,
+    "active": 40,
+    "inactive": 5,
+    "admins": 3,
+    "byRole": {
+      "admin": 3,
+      "user": 47
+    }
   }
 }
 ```
@@ -2397,340 +2790,84 @@ Get user statistics.
 
 ## Audit Logs API
 
-### Get Audit Logs (Admin)
-Get paginated audit logs.
+### Base Endpoint: `/api/audit-logs`
+
+All audit log endpoints require authentication.
+
+---
+
+### 1. Get Audit Logs
+
+Get all audit logs (Admin/Superadmin only).
 
 **Endpoint:** `GET /api/audit-logs`
-**Headers:** `Authorization: Bearer <token>`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
 **Query Parameters:**
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| page | number | Page number | 1 |
-| limit | number | Items per page | 50 |
-| userId | string | Filter by user ID | - |
-| action | string | Filter by action | - |
-| entityType | string | Filter by entity type | - |
-| startDate | string | Start date (ISO 8601) | - |
-| endDate | string | End date (ISO 8601) | - |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| page | number | No | Page number |
+| limit | number | No | Items per page |
+| action | string | No | Filter by action |
+| userId | string | No | Filter by user |
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": [
     {
-      "_id": "507f1f77bcf86cd799439061",
+      "_id": "507f1f77bcf86cd799439011",
       "userId": {
-        "_id": "507f1f77bcf86cd799439001",
-        "name": "John Doe",
-        "email": "john@example.com"
+        "_id": "507f1f77bcf86cd799439010",
+        "name": "John Doe"
       },
-      "action": "CAMPAIGN_CREATED",
-      "entityType": "Campaign",
-      "entityId": "507f1f77bcf86cd799439011",
-      "newValues": {
-        "name": "Summer Sale",
-        "subject": "🔥 Don't Miss Our Summer Sale!"
-      },
+      "action": "USER_LOGIN",
+      "entityType": "User",
+      "entityId": "507f1f77bcf86cd799439010",
       "ipAddress": "192.168.1.1",
       "userAgent": "Mozilla/5.0...",
-      "createdAt": "2026-02-08T12:00:00.000Z"
+      "timestamp": "2026-02-15T09:22:49.823Z"
     }
   ],
   "pagination": {
     "page": 1,
-    "limit": 50,
+    "limit": 20,
     "total": 1000,
-    "totalPages": 20
+    "totalPages": 50
   }
 }
 ```
 
 ---
 
-### Get My Audit Logs
-Get audit logs for the current user.
+### 2. Get My Audit Logs
+
+Get current user's audit logs.
 
 **Endpoint:** `GET /api/audit-logs/my`
-**Headers:** `Authorization: Bearer <token>`
 
-**Query Parameters:**
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| page | number | Page number | 1 |
-| limit | number | Items per page | 50 |
-| action | string | Filter by action | - |
-| entityType | string | Filter by entity type | - |
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
-**Response (200):**
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
   "data": [
     {
-      "_id": "507f1f77bcf86cd799439061",
-      "action": "CAMPAIGN_CREATED",
+      "_id": "507f1f77bcf86cd799439011",
+      "action": "CAMPAIGN_SENT",
       "entityType": "Campaign",
-      "entityId": "507f1f77bcf86cd799439011",
-      "newValues": {
-        "name": "Summer Sale"
-      },
-      "createdAt": "2026-02-08T12:00:00.000Z"
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 50,
-    "total": 100,
-    "totalPages": 2
-  }
-}
-```
-
----
-
-### Get Audit Log By ID
-Get a specific audit log entry.
-
-**Endpoint:** `GET /api/audit-logs/:id`
-**Headers:** `Authorization: Bearer <token>`
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": {
-    "_id": "507f1f77bcf86cd799439061",
-    "userId": {
-      "_id": "507f1f77bcf86cd799439001",
-      "name": "John Doe",
-      "email": "john@example.com"
-    },
-    "action": "CAMPAIGN_CREATED",
-    "entityType": "Campaign",
-    "entityId": "507f1f77bcf86cd799439011",
-    "oldValues": null,
-    "newValues": {
-      "name": "Summer Sale",
-      "subject": "🔥 Don't Miss Our Summer Sale!",
-      "type": "promotional"
-    },
-    "ipAddress": "192.168.1.1",
-    "userAgent": "Mozilla/5.0...",
-    "createdAt": "2026-02-08T12:00:00.000Z"
-  }
-}
-```
-
----
-
-### Get Audit Logs By Entity (Admin)
-Get audit logs for a specific entity.
-
-**Endpoint:** `GET /api/audit-logs/entity/:entityType/:entityId`
-**Headers:** `Authorization: Bearer <token>`
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": [
-    {
-      "_id": "507f1f77bcf86cd799439061",
-      "userId": {
-        "name": "John Doe",
-        "email": "john@example.com"
-      },
-      "action": "CAMPAIGN_CREATED",
-      "entityType": "Campaign",
-      "entityId": "507f1f77bcf86cd799439011",
-      "newValues": {
-        "name": "Summer Sale"
-      },
-      "createdAt": "2026-02-08T12:00:00.000Z"
-    },
-    {
-      "_id": "507f1f77bcf86cd799439062",
-      "userId": {
-        "name": "John Doe",
-        "email": "john@example.com"
-      },
-      "action": "CAMPAIGN_UPDATED",
-      "entityType": "Campaign",
-      "entityId": "507f1f77bcf86cd799439011",
-      "oldValues": {
-        "name": "Old Name"
-      },
-      "newValues": {
-        "name": "Summer Sale"
-      },
-      "createdAt": "2026-02-08T12:30:00.000Z"
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 50,
-    "total": 2,
-    "totalPages": 1
-  }
-}
-```
-
----
-
-### Get Audit Log Stats (Admin)
-Get audit log statistics.
-
-**Endpoint:** `GET /api/audit-logs/stats`
-**Headers:** `Authorization: Bearer <token>`
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": {
-    "actionBreakdown": [
-      {
-        "_id": "CAMPAIGN_CREATED",
-        "count": 50
-      },
-      {
-        "_id": "CAMPAIGN_SENT",
-        "count": 30
-      }
-    ],
-    "entityBreakdown": [
-      {
-        "_id": "Campaign",
-        "count": 100
-      },
-      {
-        "_id": "Subscriber",
-        "count": 50
-      }
-    ],
-    "dailyActivity": [
-      {
-        "_id": "2026-02-01",
-        "count": 20
-      },
-      {
-        "_id": "2026-02-02",
-        "count": 25
-      }
-    ]
-  }
-}
-```
-
----
-
-### Export Audit Logs (Admin)
-Export audit logs as CSV or JSON.
-
-**Endpoint:** `GET /api/audit-logs/export`
-**Headers:** `Authorization: Bearer <token>`
-
-**Query Parameters:**
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| format | string | json or csv |
-| startDate | string | Start date (ISO 8601) |
-| endDate | string | End date (ISO 8601) |
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "data": [
-    {
-      "createdAt": "2026-02-08T12:00:00.000Z",
-      "user": "John Doe",
-      "action": "CAMPAIGN_CREATED",
-      "entityType": "Campaign",
-      "ipAddress": "192.168.1.1"
-    }
-  ],
-  "count": 100
-}
-```
-
----
-
-## Scrape API
-
-### Start Scrape
-Start an Apify actor scrape.
-
-**Endpoint:** `POST /api/scrape/scrape`
-
-**Request Body:**
-```json
-{
-  "actorId": "apify/actor-id",
-  "input": {
-    "startUrls": [
-      {
-        "url": "https://example.com/directory"
-      }
-    ],
-    "maxItems": 100
-  }
-}
-```
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "actorRun": {
-    "id": "run-id",
-    "status": "succeeded",
-    "startedAt": "2026-02-08T12:00:00.000Z",
-    "finishedAt": "2026-02-08T12:05:00.000Z"
-  },
-  "itemsCount": 50,
-  "savedCount": 45
-}
-```
-
----
-
-### List Leads
-List scraped leads.
-
-**Endpoint:** `GET /api/scrape/leads`
-
-**Query Parameters:**
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| page | number | Page number | 1 |
-| limit | number | Items per page (max 100) | 50 |
-| q | string | Search query | - |
-
-**Response (200):**
-```json
-{
-  "ok": true,
-  "total": 100,
-  "page": 1,
-  "limit": 50,
-  "items": [
-    {
-      "_id": "507f1f77bcf86cd799439071",
-      "name": "Company Name",
-      "website": "https://company.com",
-      "emails": ["contact@company.com"],
-      "phones": ["+1234567890"],
-      "address": "123 Main St, City, Country",
-      "sourceActor": "apify/actor-id",
-      "validatedEmails": ["contact@company.com"],
-      "raw": {
-        "url": "https://company.com",
-        "title": "Company Name"
-      },
-      "createdAt": "2026-02-08T12:00:00.000Z"
+      "entityId": "507f1f77bcf86cd799439015",
+      "ipAddress": "192.168.1.1",
+      "timestamp": "2026-02-15T09:22:49.823Z"
     }
   ]
 }
@@ -2738,120 +2875,466 @@ List scraped leads.
 
 ---
 
-### Get Lead
-Get a single lead.
+### 3. Get Audit Log Stats
 
-**Endpoint:** `GET /api/scrape/leads/:id`
+Get audit log statistics (Admin/Superadmin only).
 
-**Response (200):**
+**Endpoint:** `GET /api/audit-logs/stats`
+
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
+
+**Response (200 - Success):**
 ```json
 {
   "ok": true,
-  "lead": {
-    "_id": "507f1f77bcf86cd799439071",
-    "name": "Company Name",
-    "website": "https://company.com",
-    "emails": ["contact@company.com"],
-    "phones": ["+1234567890"],
-    "address": "123 Main St, City, Country",
-    "sourceActor": "apify/actor-id",
-    "validatedEmails": ["contact@company.com"],
-    "raw": {
-      "url": "https://company.com",
-      "title": "Company Name"
-    },
-    "createdAt": "2026-02-08T12:00:00.000Z",
-    "updatedAt": "2026-02-08T12:00:00.000Z"
+  "data": {
+    "total": 1000,
+    "byAction": {
+      "USER_LOGIN": 500,
+      "CAMPAIGN_SENT": 200,
+      "SUBSCRIBER_CREATED": 300
+    }
   }
 }
 ```
 
 ---
 
-## Enums & Constants
+### 4. Export Audit Logs
 
-### Campaign Status
-| Status | Description |
-|--------|-------------|
-| `draft` | Campaign is being edited |
-| `scheduled` | Campaign is scheduled for sending |
-| `sending` | Campaign is currently being sent |
-| `paused` | Campaign sending is paused |
-| `completed` | Campaign sending is complete |
-| `cancelled` | Campaign was cancelled |
-| `failed` | Campaign failed to send |
+Export audit logs (Admin/Superadmin only).
 
-### Campaign Type
-| Type | Description |
-|------|-------------|
-| `newsletter` | Regular newsletter |
-| `promotional` | Promotional/sales email |
-| `transactional` | Transactional email |
-| `welcome` | Welcome email |
-| `abandoned_cart` | Abandoned cart reminder |
-| `reengagement` | Re-engagement campaign |
-| `onboarding` | Onboarding email series |
-| `event_invitation` | Event invitation |
-| `survey` | Survey request |
+**Endpoint:** `GET /api/audit-logs/export`
 
-### Email Provider
-| Provider | Description |
-|----------|-------------|
-| `sendgrid` | SendGrid |
-| `mailgun` | Mailgun |
-| `ses` | Amazon SES |
-| `smtp` | Custom SMTP |
-| `postmark` | Postmark |
-| `resend` | Resend |
+**Headers:** 
+```http
+Authorization: Bearer <your-jwt-token>
+```
 
-### Subscriber Status
-| Status | Description |
-|--------|-------------|
-| `active` | Active subscriber |
-| `unsubscribed` | Unsubscribed |
-| `bounced` | Email bounced |
-| `complained` | Marked as spam |
+**Query Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| format | string | No | csv/json |
 
-### User Roles
-| Role | Description |
-|------|-------------|
-| `user` | Regular user |
-| `admin` | Administrator |
-| `superadmin` | Super administrator |
-
----
-
-## Error Responses
-
-All error responses follow this format:
-
+**Response (200 - Success):**
 ```json
 {
-  "error": "Error message description"
+  "ok": true,
+  "data": "exported_data..."
 }
 ```
 
-**Common HTTP Status Codes:**
-| Code | Description |
-|------|-------------|
-| 200 | Success |
-| 201 | Created |
-| 400 | Bad Request |
-| 401 | Unauthorized |
-| 403 | Forbidden |
-| 404 | Not Found |
-| 500 | Internal Server Error |
+---
+
+## Scrape API
+
+### Base Endpoint: `/api/v1/scrape`
+
+Scrape API for lead generation.
 
 ---
 
-## Rate Limiting
+### 1. Start Scrape
 
-API requests are rate limited. If you exceed the limit, you will receive a `429 Too Many Requests` response.
+Start a new scrape job.
+
+**Endpoint:** `POST /api/v1/scrape/scrape`
+
+**Request Body:**
+```json
+{
+  "actorId": "your-actor-id",
+  "input": {
+    "url": "https://example.com/leads",
+    "maxItems": 100
+  }
+}
+```
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "data": {
+    "jobId": "507f1f77bcf86cd799439011",
+    "status": "started"
+  }
+}
+```
 
 ---
 
-## Version
+### 2. List Leads
 
-API Version: **v1**
+Get list of scraped leads.
 
-Last Updated: **2026-02-08**
+**Endpoint:** `GET /api/v1/scrape/leads`
+
+**Query Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| page | number | No | Page number |
+| limit | number | No | Items per page |
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "data": [
+    {
+      "_id": "507f1f77bcf86cd799439011",
+      "email": "lead@example.com",
+      "name": "Lead Name",
+      "company": "Lead Company",
+      "source": "scrape",
+      "createdAt": "2026-02-15T09:22:49.823Z"
+    }
+  ]
+}
+```
+
+---
+
+### 3. Get Lead
+
+Get a single lead by ID.
+
+**Endpoint:** `GET /api/v1/scrape/leads/:id`
+
+**Response (200 - Success):**
+```json
+{
+  "ok": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439011",
+    "email": "lead@example.com",
+    "name": "Lead Name",
+    "company": "Lead Company",
+    "phone": "+1234567890",
+    "source": "scrape",
+    "createdAt": "2026-02-15T09:22:49.823Z"
+  }
+}
+```
+
+---
+
+## Frontend Integration Guidelines
+
+### Authentication Flow
+
+1. **Registration Flow**
+   ```
+   1. User fills registration form
+   2. POST /api/v1/auth/register
+   3. Receive userId in response
+   4. Redirect to OTP verification page
+   5. User enters OTP
+   6. POST /api/v1/auth/verify-email
+   7. On success, redirect to login
+   8. User logs in
+   9. Store JWT token securely
+   ```
+
+2. **Login Flow**
+   ```
+   1. User enters email/password
+   2. POST /api/v1/auth/login
+   3. Receive token and user data
+   4. Store token (localStorage/sessionStorage)
+   5. Redirect to dashboard
+   ```
+
+3. **Password Reset Flow**
+   ```
+   1. User clicks "Forgot Password"
+   2. User enters email
+   3. POST /api/v1/auth/forgot-password
+   4. Show message (security)
+   5. User checks email for OTP
+   6. User enters OTP + new password
+   7. POST /api/v1/auth/reset-password
+   8. Redirect to login
+   ```
+
+### Token Management
+
+```javascript
+// Store token
+localStorage.setItem('authToken', response.token);
+
+// Get token
+const token = localStorage.getItem('authToken');
+
+// Include in requests
+fetch('/api/v1/campaigns', {
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  }
+});
+
+// Clear token on logout
+localStorage.removeItem('authToken');
+```
+
+### Request Wrapper Example
+
+```javascript
+class ApiClient {
+  constructor(baseUrl = '/api/v1') {
+    this.baseUrl = baseUrl;
+  }
+
+  getToken() {
+    return localStorage.getItem('authToken');
+  }
+
+  async request(endpoint, options = {}) {
+    const token = this.getToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` }),
+      ...options.headers
+    };
+
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      ...options,
+      headers
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Request failed');
+    }
+
+    return data;
+  }
+
+  // Auth endpoints
+  register(data) {
+    return this.request('/auth/register', { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  login(data) {
+    return this.request('/auth/login', { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  verifyEmail(data) {
+    return this.request('/auth/verify-email', { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  getCurrentUser() {
+    return this.request('/auth/me');
+  }
+
+  // Campaigns
+  getCampaigns(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return this.request(`/campaigns?${query}`);
+  }
+
+  createCampaign(data) {
+    return this.request('/campaigns', { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  // ... other methods
+}
+
+const api = new ApiClient();
+```
+
+### OTP Input Component
+
+```javascript
+// OTP Input Component Example
+function OTPInput({ length = 6, onComplete }) {
+  const [otp, setOtp] = useState('');
+
+  const handleChange = (index, value) => {
+    const newOtp = otp.split('');
+    newOtp[index] = value;
+    const finalOtp = newOtp.join('');
+    setOtp(finalOtp);
+
+    if (finalOtp.length === length && onComplete) {
+      onComplete(finalOtp);
+    }
+  };
+
+  return (
+    <div className="otp-input">
+      {Array.from({ length }).map((_, index) => (
+        <input
+          key={index}
+          type="text"
+          maxLength={1}
+          value={otp[index] || ''}
+          onChange={(e) => handleChange(index, e.target.value)}
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+### Error Handling
+
+```javascript
+// Global error handler
+function handleApiError(error) {
+  switch (error.message) {
+    case 'Invalid credentials':
+      // Show login error
+      break;
+    case 'Invalid or expired OTP':
+      // Show OTP error, allow resend
+      break;
+    case 'OTP has expired':
+      // Show expired message, auto-resend
+      break;
+    case 'Unauthorized':
+      // Clear token, redirect to login
+      localStorage.removeItem('authToken');
+      window.location.href = '/login';
+      break;
+    default:
+      // Show generic error
+  }
+}
+```
+
+### Protected Route Component
+
+```javascript
+function ProtectedRoute({ children }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      window.location.href = '/login';
+      return;
+    }
+
+    // Verify token is still valid
+    fetch('/api/v1/auth/me', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => {
+      if (!res.ok) throw new Error('Unauthorized');
+      return res.json();
+    })
+    .then(data => {
+      setUser(data.user);
+      setLoading(false);
+    })
+    .catch(() => {
+      localStorage.removeItem('authToken');
+      window.location.href = '/login';
+    });
+  }, []);
+
+  if (loading) return <LoadingSpinner />;
+
+  return children;
+}
+```
+
+---
+
+## Error Codes
+
+| Code | Message | Description |
+|------|---------|-------------|
+| 400 | Bad Request | Invalid request body or parameters |
+| 401 | Unauthorized | Invalid or missing JWT token |
+| 403 | Forbidden | Insufficient permissions |
+| 404 | Not Found | Resource not found |
+| 409 | Conflict | Resource already exists |
+| 422 | Unprocessable Entity | Validation failed |
+| 429 | Too Many Requests | Rate limit exceeded |
+| 500 | Internal Server Error | Server error |
+
+### Common Error Responses
+
+```json
+{
+  "error": "Invalid credentials"
+}
+```
+
+```json
+{
+  "error": "Invalid or expired OTP"
+}
+```
+
+```json
+{
+  "error": "Email already registered"
+}
+```
+
+```json
+{
+  "ok": false,
+  "error": "Campaign not found"
+}
+```
+
+---
+
+## Webhooks
+
+Configure webhooks to receive real-time notifications.
+
+### Available Webhook Events
+
+| Event | Description |
+|-------|-------------|
+| campaign.sent | Campaign was sent |
+| campaign.delivered | Email was delivered |
+| campaign.opened | Email was opened |
+| campaign.clicked | Link was clicked |
+| campaign.bounced | Email bounced |
+| subscriber.added | New subscriber added |
+| subscriber.unsubscribed | Subscriber unsubscribed |
+
+### Webhook Payload
+
+```json
+{
+  "event": "campaign.sent",
+  "timestamp": "2026-02-15T09:22:49.823Z",
+  "data": {
+    "campaignId": "507f1f77bcf86cd799439011",
+    "subscriberId": "507f1f77bcf86cd799439012",
+    "messageId": "msg-123"
+  }
+}
+```
+
+---
+
+## Rate Limits
+
+- **Authentication endpoints:** 5 requests per minute
+- **Campaign operations:** 10 requests per minute
+- **Subscriber operations:** 60 requests per minute
+- **Analytics:** 30 requests per minute
+
+---
+
+## Support
+
+For API support, contact: support@example.com
+
+---
+
+*Last Updated: 2026-02-15*

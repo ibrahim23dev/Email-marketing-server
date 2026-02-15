@@ -7,16 +7,39 @@ import UserSettings from '../models/userSettings.model';
 import AuditLog from '../models/auditLog.model';
 import { signToken, verifyToken } from '../utils/jwt';
 import logger from '../utils/logger';
+import { getEmailService } from '../infrastructure/email/emailService';
 
 // Generate 6-digit OTP
 const generateOTP = (): string => {
   return crypto.randomBytes(3).toString('hex').toUpperCase();
 };
 
-// Send OTP (simulated - in production integrate with email service)
+// Send OTP via email service
 const sendOTPEmail = async (email: string, otp: string, type: string): Promise<void> => {
-  // TODO: Implement actual email sending
-  logger.info(`OTP for ${email}: ${otp} (type: ${type})`);
+  try {
+    const emailService = getEmailService();
+    
+    if (type === 'email_verification') {
+      const result = await emailService.sendVerificationEmail(email, otp);
+      if (!result.success) {
+        logger.error(`Failed to send verification email to ${email}:`, result.error);
+        throw new Error(result.error || 'Failed to send verification email');
+      }
+      logger.info(`Verification OTP sent to ${email}`);
+    } else if (type === 'password_reset') {
+      const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+      const resetLink = `${clientUrl}/reset-password?email=${encodeURIComponent(email)}&otp=${otp}`;
+      const result = await emailService.sendPasswordResetEmail(email, resetLink);
+      if (!result.success) {
+        logger.error(`Failed to send password reset email to ${email}:`, result.error);
+        throw new Error(result.error || 'Failed to send password reset email');
+      }
+      logger.info(`Password reset email sent to ${email}`);
+    }
+  } catch (error) {
+    logger.error('Error sending OTP email:', error);
+    throw error;
+  }
 };
 
 // ======================
