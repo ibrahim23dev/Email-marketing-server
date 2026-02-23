@@ -1,0 +1,19 @@
+2026-02-23 15:24:07:247 [31merror[39m: [31m❌ MongoDB connection error: connect ECONNREFUSED ::1:27017, connect ECONNREFUSED 127.0.0.1:27017[39m
+2026-02-23 15:24:07:247 [31merror[39m: [31m❌ MongoDB connection error: connect ECONNREFUSED ::1:27017, connect ECONNREFUSED 127.0.0.1:27017[39m
+2026-02-23 15:29:47:2947 [31merror[39m: [31m❌ MongoDB connection error: connect ECONNREFUSED ::1:27017, connect ECONNREFUSED 127.0.0.1:27017[39m
+2026-02-23 15:45:47:4547 [31merror[39m: [31m❌ MongoDB connection error: connect ECONNREFUSED ::1:27017, connect ECONNREFUSED 127.0.0.1:27017[39m
+2026-02-23 15:45:48:4548 [31merror[39m: [31m❌ MongoDB connection error: connect ECONNREFUSED ::1:27017, connect ECONNREFUSED 127.0.0.1:27017[39m
+2026-02-23 16:07:19:719 [31merror[39m: [31m❌ MongoDB connection error: connect ECONNREFUSED 127.0.0.1:27017[39m
+2026-02-23 16:24:59:2459 [31merror[39m: [31m❌ MongoDB connection error: connect ECONNREFUSED 127.0.0.1:27017[39m
+2026-02-23 16:41:06:416 [31merror[39m: [31m❌ MongoDB connection error: connect ECONNREFUSED 127.0.0.1:27017[39m
+2026-02-23 16:41:06:416 [31merror[39m: [31m❌ MongoDB connection error: connect ECONNREFUSED 127.0.0.1:27017[39m
+2026-02-23 16:52:26:5226 [31merror[39m: [31m❌ MongoDB connection error: connect ECONNREFUSED 127.0.0.1:27017[39m
+2026-02-23 16:52:26:5226 [31merror[39m: [31m❌ MongoDB connection error: connect ECONNREFUSED 127.0.0.1:27017[39m
+2026-02-23 16:58:10:5810 [32minfo[39m: [32m✅ MongoDB Connected: companywebsite-shard-00-01.mhc7g.mongodb.net[39m
+2026-02-23 16:58:10:5810 [32minfo[39m: [32m🚀 Server running in development mode on port 5000[39m
+2026-02-23 16:58:10:5810 [32minfo[39m: [32m📚 Swagger docs available at http://localhost:5000/api-docs[39m
+2026-02-23 16:58:10:5810 [32minfo[39m: [32m✅ MongoDB Connected: companywebsite-shard-00-00.mhc7g.mongodb.net[39m
+2026-02-23 16:58:10:5810 [32minfo[39m: [32m🚀 Server running in development mode on port 5000[39m
+2026-02-23 16:58:10:5810 [32minfo[39m: [32m📚 Swagger docs available at http://localhost:5000/api-docs[39m
+2026-02-23 17:03:05:35 [31merror[39m: [31m[POST] /api/v1/auth/login >> StatusCode:: 401, Message:: Invalid credentials[39m
+2026-02-23 17:03:27:327 [31merror[39m: [31m[POST] /api/v1/auth/register >> StatusCode:: 409, Message:: User with this email already exists[39m

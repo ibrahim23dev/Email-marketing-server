@@ -1,108 +1,49 @@
-import express from 'express';
+import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
-import crypto from 'crypto';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './config/swagger';
+import { errorHandler } from './middlewares/error.middleware';
+import { limiter } from './middlewares/rate-limiter';
+import apiRoutes from './routes';
+import { env } from './config/env';
 
-// Import error handling middleware
-import { errorHandler, notFoundHandler } from './shared/errors';
-import { ApiResponseBuilder, API_VERSION } from './shared/response';
+const app: Express = express();
 
-// Import routes from new module structure
-import templateRoutes from './modules/template/template.routes';
-
-// Import legacy routes (to be refactored)
-import scrapeRoutes from './routes/scrape.routes';
-import authRoutes from './routes/auth.routes';
-import campaignRoutes from './routes/campaign.routes';
-import audienceRoutes from './routes/audience.routes';
-import subscriberRoutes from './routes/subscriber.routes';
-import tagRoutes from './routes/tag.routes';
-import dashboardRoutes from './routes/dashboard.routes';
-import analyticsRoutes from './routes/analytics.routes';
-import settingsRoutes from './routes/settings.routes';
-import userManagementRoutes from './routes/userManagement.routes';
-import auditLogRoutes from './routes/auditLog.routes';
-
-dotenv.config();
-
-const app = express();
-
-// ============================================
-// Middleware
-// ============================================
-
+// Security Middlewares
+app.use(helmet());
 app.use(cors());
+
+// Rate Limiting
+app.use('/api', limiter);
+
+// Built-in Middlewares
 app.use(express.json({ limit: '10mb' }));
-app.use(morgan('dev'));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Request ID middleware
-app.use((req, res, next) => {
-  const requestId = req.headers['x-request-id'] || crypto.randomUUID();
-  (req.headers as any)['x-request-id'] = requestId;
-  res.setHeader('x-request-id', requestId);
-  next();
-});
+// Logging Middleware
+if (env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+}
 
-// ============================================
 // API Routes
-// ============================================
+app.use('/api/v1', apiRoutes);
 
-app.use('/api/v1', scrapeRoutes);
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/campaigns', campaignRoutes);
-app.use('/api/v1/templates', templateRoutes); // New module structure
-app.use('/api/v1/audiences', audienceRoutes);
-app.use('/api/subscribers', subscriberRoutes);
-app.use('/api/tags', tagRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/users', userManagementRoutes);
-app.use('/api/audit-logs', auditLogRoutes);
+// Swagger Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// ============================================
 // Health Check
-// Time Complexity: O(1)
-// ============================================
-
-app.get('/', (req, res) => {
-  ApiResponseBuilder.success(res, {
-    env: process.env.NODE_ENV || 'dev'
-  }, 200, 'Email Marketing API is running');
+app.get('/health', (req: Request, res: Response) => {
+  res.status(200).json({ status: 'UP', timestamp: new Date() });
 });
 
-// ============================================
-// API Documentation Endpoint
-// Time Complexity: O(1)
-// ============================================
-
-app.get('/api', (req, res) => {
-  ApiResponseBuilder.success(res, {
-    message: 'Email Marketing API',
-    version: API_VERSION,
-    endpoints: {
-      auth: '/api/v1/auth',
-      campaigns: '/api/v1/campaigns',
-      templates: '/api/v1/templates',
-      audiences: '/api/v1/audiences',
-      subscribers: '/api/subscribers',
-      tags: '/api/tags',
-      dashboard: '/api/dashboard',
-      analytics: '/api/analytics',
-      settings: '/api/settings',
-      users: '/api/users',
-      auditLogs: '/api/audit-logs'
-    }
-  }, 200, 'API Documentation');
+// 404 Handler
+app.use((req: Request, res: Response) => {
+  res.status(404).json({ success: false, message: 'Resource not found' });
 });
 
-// ============================================
-// Error Handling Middleware
-// Must be after all routes
-// ============================================
-
-app.use(notFoundHandler);
+// Global Error Handler
 app.use(errorHandler);
 
 export default app;

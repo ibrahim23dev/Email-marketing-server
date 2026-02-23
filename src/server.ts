@@ -1,66 +1,35 @@
 import app from './app';
-import { DatabaseManager } from './infrastructure/database';
-import logger from './utils/logger';
+import { connectDB } from './config/database';
+import { env } from './config/env';
+import { logger } from './config/logger';
 
-// ============================================
-// Server Configuration
-// ============================================
-
-const PORT = process.env.PORT || 5000;
-const NODE_ENV = process.env.NODE_ENV || 'development';
-
-// ============================================
-// Start Server
-// Time Complexity: O(log n) for database connection
-// ============================================
-
-async function startServer(): Promise<void> {
+const startServer = async () => {
   try {
-    // Connect to database
-    await DatabaseManager.connect();
-    logger.info('Database connected successfully');
+    // Connect to Database
+    await connectDB();
 
-    // Start HTTP server
-    const server = app.listen(PORT, () => {
-      logger.info(`========================================`);
-      logger.info(`🚀 Server running in ${NODE_ENV} mode`);
-      logger.info(`📡 Listening on port ${PORT}`);
-      logger.info(`🌐 API Base: http://localhost:${PORT}/api/v1`);
-      logger.info(`========================================`);
+    // Start listening
+    const server = app.listen(env.PORT, () => {
+      logger.info(`🚀 Server running in ${env.NODE_ENV} mode on port ${env.PORT}`);
+      logger.info(`📚 Swagger docs available at http://localhost:${env.PORT}/api-docs`);
     });
 
-    // Graceful shutdown handlers
-    const gracefulShutdown = async (signal: string): Promise<void> => {
-      logger.info(`\n${signal} received. Starting graceful shutdown...`);
+    // Handle Unhandled Rejections
+    process.on('unhandledRejection', (err: any) => {
+      logger.error(`❌ Unhandled Rejection: ${err.message}`);
+      server.close(() => process.exit(1));
+    });
 
-      server.close(async () => {
-        logger.info('HTTP server closed');
-
-        try {
-          await DatabaseManager.disconnect();
-          logger.info('Database connection closed');
-          process.exit(0);
-        } catch (error) {
-          logger.error('Error during shutdown:', error);
-          process.exit(1);
-        }
-      });
-
-      // Force shutdown after 30 seconds
-      setTimeout(() => {
-        logger.error('Could not close connections in time, forcefully shutting down');
-        process.exit(1);
-      }, 30000);
-    };
-
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (err: any) => {
+      logger.error(`❌ Uncaught Exception: ${err.message}`);
+      process.exit(1);
+    });
 
   } catch (error) {
-    logger.error('Failed to start server:', error);
+    logger.error(`❌ Initialization Error: ${(error as Error).message}`);
     process.exit(1);
   }
-}
+};
 
-// Start the server
 startServer();
