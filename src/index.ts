@@ -2,24 +2,19 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import mongoose from 'mongoose';
-import app from '../src/app.js';
+import app from './app.js';
 import logger from './utils/logger';
 
-const PORT = Number(process.env.PORT) || 5000;
-
-if (!process.env.MONGODB_URI) {
-  throw new Error("❌ MONGODB_URI is missing in .env");
-}
-
-const MONGODB_URI = process.env.MONGODB_URI;
+const PORT = Number(process.env.PORT || 4000);
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/apify_scraper';
 
 async function start() {
   try {
     await mongoose.connect(MONGODB_URI);
     logger.info('Connected to MongoDB');
 
-    app.listen(PORT, "0.0.0.0", () => {
-      logger.info(`Server listening on port ${PORT}`);
+    app.listen(PORT, () => {
+      logger.info(`Server listening on http://localhost:${PORT}`);
     });
   } catch (err) {
     logger.error('Startup error:', err);
