@@ -32,7 +32,17 @@ const app = express();
 // Middleware
 // ============================================
 
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      'http://187.77.185.7',
+      'http://187.77.185.7:3000',
+      'http://localhost:5173'
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 
