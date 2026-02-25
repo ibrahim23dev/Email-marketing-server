@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 import app from '../src/app.js';
 import logger from './utils/logger';
 
-const PORT = Number(process.env.PORT || 4000);
+const PORT = Number(process.env.PORT) || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/apify_scraper';
 
 async function start() {
