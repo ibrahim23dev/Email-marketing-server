@@ -1,172 +1,253 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import apifyService from '../services/apify.service';
 import Lead from '../models/lead';
 import logger from '../utils/logger';
-import { validateEmails } from '../utils/validator';
+import { AuthRequest } from '../middlewares/auth.middleware';
 
-export async function startScrape(req: Request, res: Response) {
+const GOOGLE_ACTOR = 'compass/google-maps-extractor';
+const EMAIL_ACTOR  = 'vdrmota/contact-info-scraper';
+const SOCIAL_ACTOR = 'tri_angle/social-media-finder';
+
+/* ─────────────────────────────────────────────────────────
+   Helper – is the caller a privileged admin?
+───────────────────────────────────────────────────────── */
+function isAdmin(role: string): boolean {
+  return role === 'superadmin' || role === 'admin';
+}
+
+/* ==========================================================
+   START SCRAPE PIPELINE
+   POST /api/v1/scrape
+   Body: { keyword: string, limit?: number }
+========================================================== */
+export async function startScrape(req: AuthRequest, res: Response) {
   try {
-    const { actorId, input } = req.body;
+    const userId  = req.user.id;
+    const keyword: string = req.body.keyword?.trim();
+    const limit: number   = Math.min(Number(req.body.limit) || 20, 100);
 
-    if (!actorId) {
-      return res.status(400).json({ ok: false, error: 'actorId is required' });
+    if (!keyword) {
+      return res.status(400).json({ ok: false, error: 'keyword is required' });
     }
 
-    logger.info(`Starting Apify actor: ${actorId}`);
+    logger.info(`[user:${userId}] Lead scraping started → "${keyword}"`);
 
-    // 1️⃣ Run actor & fetch dataset items
-    const { run, items } = await apifyService.runActorAndFetchResults(actorId, input);
+    /* ── STEP 1: Google Maps ──────────────────────────── */
+    const { items: businesses } = await apifyService.runActorAndFetchResults(
+      GOOGLE_ACTOR,
+      { searchStringsArray: [keyword], maxCrawledPlacesPerSearch: limit }
+    );
 
-    if (!items || !items.length) {
-      return res.json({
-        ok: true,
-        actorRun: run,
-        itemsCount: 0,
-        savedCount: 0,
-        message: 'No leads found'
-      });
+    if (!businesses?.length) {
+      return res.json({ ok: true, message: 'No businesses found' });
     }
 
-    // 2️⃣ Normalize Apify dataset items → Lead docs
-    const docs = items.map((it: any) => {
-      const emails = Array.isArray(it.emails) ? it.emails : [];
-      const phones = Array.isArray(it.phones) ? it.phones : [];
+    let savedCount = 0;
 
-      return {
-        name: it.title || it.name || '',
-        website: it.url || '',
-        emails,
-        phones,
-        address: it.address || '',
-        sourceActor: actorId,
-        validatedEmails: undefined as string[] | undefined,
-        raw: it
-      };
-    });
+    for (const business of businesses) {
+      try {
+        const website: string  = business.website || '';
+        const phones: string[] = business.phone ? [business.phone] : [];
+        let   emails: string[] = [];
 
-    // 3️⃣ Optional email validation
-    if (
-      process.env.ENABLE_EMAIL_VALIDATION === 'true' &&
-      process.env.EMAIL_VALIDATOR_API_KEY
-    ) {
-      logger.info('Running email validation...');
-      for (const doc of docs) {
-        if (doc.emails.length) {
-          doc.validatedEmails = await validateEmails(doc.emails);
+        /* ── STEP 2: Website email scrape ─────────────── */
+        if (website) {
+          try {
+            const { items } = await apifyService.runActorAndFetchResults(
+              EMAIL_ACTOR,
+              { startUrls: [{ url: website }], maxDepth: 1 }
+            );
+            emails = items?.flatMap((i: any) => i.emails || []) || [];
+          } catch {
+            logger.warn(`[user:${userId}] Email scrape failed → ${website}`);
+          }
         }
+
+        /* ── STEP 3: Social scrape ────────────────────── */
+        let socials: any[] = [];
+        try {
+          const { items } = await apifyService.runActorAndFetchResults(
+            SOCIAL_ACTOR,
+            { query: business.title }
+          );
+          socials = items || [];
+        } catch {
+          logger.warn(`[user:${userId}] Social scrape failed → ${business.title}`);
+        }
+
+        /* ── Normalize ────────────────────────────────── */
+        const doc = {
+          userId,                              // ← owner
+          searchKeyword: keyword,
+          name:          business.title || '',
+          website,
+          emails:        [...new Set<string>(emails)],
+          phones,
+          address:       business.address || '',
+          sourceActor:   'lead-pipeline',
+          raw:           { business, socials }
+        };
+
+        /* ── Dedup filter (scoped per user) ───────────── */
+        const baseFilter: any = { userId };   // never cross user boundaries
+
+        const uniqueFilter =
+          website              ? { ...baseFilter, website }                     :
+          emails.length        ? { ...baseFilter, emails: { $in: emails } }     :
+          phones.length        ? { ...baseFilter, phones: { $in: phones } }     :
+          null;
+
+        if (!uniqueFilter) continue;
+
+        /* ── Upsert (per-user) ────────────────────────── */
+        await Lead.findOneAndUpdate(
+          uniqueFilter,
+          { $set: doc },
+          { upsert: true, new: true }
+        );
+
+        savedCount++;
+      } catch (err) {
+        logger.error(`[user:${userId}] Business processing failed → ${business.title}`, err);
       }
     }
 
-    // 4️⃣ Save with deduplication
-    let savedCount = 0;
-
-    for (const doc of docs) {
-      const filter =
-        doc.website
-          ? { website: doc.website }
-          : doc.emails.length
-          ? { emails: { $in: doc.emails } }
-          : null;
-
-      if (!filter) continue;
-
-      await Lead.findOneAndUpdate(
-        filter,
-        {
-          $set: {
-            name: doc.name,
-            phones: doc.phones,
-            address: doc.address,
-            sourceActor: doc.sourceActor,
-            raw: doc.raw,
-            ...(doc.validatedEmails ? { validatedEmails: doc.validatedEmails } : {})
-          },
-          $setOnInsert: {
-            website: doc.website,
-            emails: doc.emails
-          }
-        },
-        { upsert: true }
-      );
-
-      savedCount++;
-    }
-
     return res.json({
       ok: true,
-      actorRun: {
-        id: run.id,
-        status: run.status,
-        startedAt: run.startedAt,
-        finishedAt: run.finishedAt
-      },
-      itemsCount: items.length,
-      savedCount
+      keyword,
+      businessesFound: businesses.length,
+      leadsSaved:      savedCount
     });
+
   } catch (err: any) {
-    logger.error('startScrape error:', err?.message || err);
-    return res.status(500).json({
-      ok: false,
-      error: err?.message || 'Internal server error'
-    });
+    logger.error('Scrape pipeline failed', err);
+    return res.status(500).json({ ok: false, error: err?.message || 'Internal server error' });
   }
 }
 
-/* =========================
-   LIST LEADS
-========================= */
-export async function listLeads(req: Request, res: Response) {
-  try {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.min(100, Number(req.query.limit) || 50);
-    const q = (req.query.q as string) || '';
 
-    const filter: any = {};
+/* ==========================================================
+   LIST LEADS
+   GET /api/v1/leads?page=1&limit=50&q=searchTerm
+   • Regular users see only their own leads.
+   • admins / superadmins see everyone's (with optional userId filter).
+========================================================== */
+export async function listLeads(req: AuthRequest, res: Response) {
+  try {
+    const { id: callerId, role } = req.user;
+
+    const page  = Math.max(1, Number(req.query.page)  || 1);
+    const limit = Math.min(100, Number(req.query.limit) || 50);
+    const q     = (req.query.q as string) || '';
+
+    /* ── Ownership scope ──────────────────────────────── */
+    const filter: any = isAdmin(role)
+      ? {}                               // admins optionally filter by ?userId=
+      : { userId: callerId };            // users see only their own
+
+    // Admins can further narrow by ?userId=<id>
+    if (isAdmin(role) && req.query.userId) {
+      filter.userId = req.query.userId;
+    }
+
+    /* ── Text search ──────────────────────────────────── */
     if (q) {
       filter.$or = [
-        { name: new RegExp(q, 'i') },
+        { name:    new RegExp(q, 'i') },
         { website: new RegExp(q, 'i') },
-        { emails: new RegExp(q, 'i') }
+        { emails:  new RegExp(q, 'i') },
+        { phones:  new RegExp(q, 'i') },
+        { searchKeyword: new RegExp(q, 'i') }
       ];
     }
 
-    const total = await Lead.countDocuments(filter);
-    const items = await Lead.find(filter)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .lean();
+    const [total, items] = await Promise.all([
+      Lead.countDocuments(filter),
+      Lead.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('userId', 'name email')   // handy for admin views
+        .lean()
+    ]);
 
     return res.json({
       ok: true,
-      total,
       page,
       limit,
+      total,
+      pages: Math.ceil(total / limit),
       items
     });
+
   } catch (err: any) {
-    return res.status(500).json({
-      ok: false,
-      error: err?.message || 'Server error'
-    });
+    logger.error('listLeads error', err);
+    return res.status(500).json({ ok: false, error: err?.message || 'Server error' });
   }
 }
 
-/* =========================
+
+/* ==========================================================
    GET SINGLE LEAD
-========================= */
-export async function getLead(req: Request, res: Response) {
+   GET /api/v1/leads/:id
+   • Regular users can only access their own leads.
+   • Admins can access any lead.
+========================================================== */
+export async function getLead(req: AuthRequest, res: Response) {
   try {
-    const lead = await Lead.findById(req.params.id).lean();
+    const { id: callerId, role } = req.user;
+
+    const lead = await Lead.findById(req.params.id)
+      .populate('userId', 'name email')
+      .lean();
+
     if (!lead) {
       return res.status(404).json({ ok: false, error: 'Lead not found' });
     }
 
+    /* ── Ownership check for non-admins ──────────────── */
+    if (!isAdmin(role) && String(lead.userId) !== callerId) {
+      return res.status(403).json({ ok: false, error: 'Access denied' });
+    }
+
     return res.json({ ok: true, lead });
+
   } catch (err: any) {
-    return res.status(500).json({
-      ok: false,
-      error: err?.message || 'Server error'
-    });
+    logger.error('getLead error', err);
+    return res.status(500).json({ ok: false, error: err?.message || 'Server error' });
+  }
+}
+
+
+/* ==========================================================
+   DELETE LEAD
+   DELETE /api/v1/leads/:id
+   • Regular users can only delete their own leads.
+   • Admins can delete any lead.
+========================================================== */
+export async function deleteLead(req: AuthRequest, res: Response) {
+  try {
+    const { id: callerId, role } = req.user;
+
+    const lead = await Lead.findById(req.params.id);
+
+    if (!lead) {
+      return res.status(404).json({ ok: false, error: 'Lead not found' });
+    }
+
+    /* ── Ownership check for non-admins ──────────────── */
+    if (!isAdmin(role) && String(lead.userId) !== callerId) {
+      return res.status(403).json({ ok: false, error: 'Access denied' });
+    }
+
+    await lead.deleteOne();
+
+    logger.info(`Lead ${req.params.id} deleted by user ${callerId}`);
+
+    return res.json({ ok: true, message: 'Lead deleted successfully' });
+
+  } catch (err: any) {
+    logger.error('deleteLead error', err);
+    return res.status(500).json({ ok: false, error: err?.message || 'Server error' });
   }
 }
