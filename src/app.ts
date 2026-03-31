@@ -23,6 +23,7 @@ import analyticsRoutes from './routes/analytics.routes';
 import settingsRoutes from './routes/settings.routes';
 import userManagementRoutes from './routes/userManagement.routes';
 import auditLogRoutes from './routes/auditLog.routes';
+import smsRoutes from "./routes/sms.routes";
 
 dotenv.config();
 
@@ -37,7 +38,8 @@ app.use(
     origin: [
       'http://187.77.185.7',
       'http://187.77.185.7:3000',
-      'http://localhost:5173'
+      'http://localhost:5173',
+      'http://localhost:3000'
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true,
@@ -70,6 +72,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/users', userManagementRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
+app.use("/api/v1/sms", smsRoutes);
 
 // ============================================
 // Health Check
