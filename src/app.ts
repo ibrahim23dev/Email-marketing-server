@@ -24,6 +24,7 @@ import settingsRoutes from './routes/settings.routes';
 import userManagementRoutes from './routes/userManagement.routes';
 import auditLogRoutes from './routes/auditLog.routes';
 import smsRoutes from "./routes/sms.routes";
+import paymentRoutes from './routes/payment.routes';
 
 dotenv.config();
 
@@ -37,9 +38,9 @@ app.use(
   cors({
     origin: [
       'http://187.77.185.7',
-      'http://187.77.185.7:3000',
+      'http://187.77.185.7:3001',
       'http://localhost:5173',
-      'http://localhost:3000'
+      'http://localhost:3001'
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true,
@@ -61,6 +62,7 @@ app.use((req, res, next) => {
 // ============================================
 
 app.use('/api/v1', scrapeRoutes);
+app.get('/api/v1/ping', (req, res) => res.json({ ping: 'pong' }));
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/campaigns', campaignRoutes);
 app.use('/api/v1/templates', templateRoutes); // New module structure
@@ -73,6 +75,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/users', userManagementRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use("/api/v1/sms", smsRoutes);
+app.use("/api/v1/payment-request", paymentRoutes);
 
 // ============================================
 // Health Check

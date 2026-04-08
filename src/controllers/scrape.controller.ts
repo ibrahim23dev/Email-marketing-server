@@ -23,6 +23,7 @@ function isAdmin(role: string): boolean {
 export async function startScrape(req: AuthRequest, res: Response) {
   try {
     const userId  = req.user.id;
+    const dbUser  = (req as any).dbUser; // Attached by checkCreditsBeforeScrape
     const keyword: string = req.body.keyword?.trim();
     const limit: number   = Math.min(Number(req.body.limit) || 20, 100);
 
@@ -110,6 +111,14 @@ export async function startScrape(req: AuthRequest, res: Response) {
       } catch (err) {
         logger.error(`[user:${userId}] Business processing failed → ${business.title}`, err);
       }
+    }
+
+    // Deduct credits and increment scrape count
+    const COST_PER_SCRAPE = 100;
+    if (dbUser) {
+       dbUser.credits -= COST_PER_SCRAPE;
+       dbUser.scrapeCount += 1;
+       await dbUser.save();
     }
 
     return res.json({

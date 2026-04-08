@@ -26,6 +26,7 @@ const LeadSchema = new Schema(
 
 /* ── Indexes ────────────────────────────────────────── */
 // Per-user dedup lookups
+
 LeadSchema.index({ userId: 1, website: 1 });
 LeadSchema.index({ userId: 1, emails: 1 });
 // Admin / cross-user lookups

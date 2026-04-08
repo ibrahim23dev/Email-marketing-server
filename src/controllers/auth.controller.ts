@@ -124,13 +124,8 @@ export const login = async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Account is disabled' });
     }
 
-    // Check trial expiration for regular users
-    if (user.role === 'user' && user.trialEndsAt && new Date() > user.trialEndsAt) {
-      return res.status(403).json({ 
-        error: 'Free trial expired',
-        trialExpired: true
-      });
-    }
+    // Trial expiration is handled by checkCreditsBeforeScrape on the scrape endpoint now.
+    // Users can always log in.
 
     // Update last login
     await User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() });
@@ -160,6 +155,10 @@ export const login = async (req: Request, res: Response) => {
         email: user.email,
         role: user.role,
         isEmailVerified: user.isEmailVerified,
+        credits: user.credits,
+        trialStartDate: user.trialStartDate,
+        scrapeCount: user.scrapeCount,
+        isPremium: user.isPremium,
         trialEndsAt: user.trialEndsAt
       }
     });
@@ -460,6 +459,10 @@ export const getCurrentUser = async (req: Request, res: Response) => {
         role: user.role,
         isActive: user.isActive,
         isEmailVerified: user.isEmailVerified,
+        credits: user.credits,
+        trialStartDate: user.trialStartDate,
+        scrapeCount: user.scrapeCount,
+        isPremium: user.isPremium,
         trialEndsAt: user.trialEndsAt,
         lastLoginAt: user.lastLoginAt,
         avatar: user.avatar,
