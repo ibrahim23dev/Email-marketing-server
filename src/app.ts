@@ -40,7 +40,11 @@ app.use(
       'http://187.77.185.7',
       'http://187.77.185.7:3001',
       'http://localhost:5173',
-      'http://localhost:3001'
+      'http://localhost:3001',
+      'https://funurex.com',
+      'http://funurex.com',
+      'http://api.funurex.com',
+      'https://api.funurex.com'
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true,
