@@ -13,6 +13,11 @@ export interface IUser extends Document {
   phone?: string;
   company?: string;
   timezone: string;
+  // SaaS Fields
+  credits: number;
+  trialStartDate: Date;
+  scrapeCount: number;
+  isPremium: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +63,22 @@ const UserSchema = new Schema<IUser>(
     timezone: {
       type: String,
       default: 'UTC'
+    },
+    credits: {
+      type: Number,
+      default: 300
+    },
+    trialStartDate: {
+      type: Date,
+      default: Date.now
+    },
+    scrapeCount: {
+      type: Number,
+      default: 0
+    },
+    isPremium: {
+      type: Boolean,
+      default: false
     }
   },
   { timestamps: true }
