@@ -11,7 +11,8 @@ import {
   resumeCampaign,
   duplicateCampaign,
   validateCampaign,
-  getCampaignAnalytics
+  getCampaignAnalytics,
+  getCampaignStats
 } from '../controllers/campaign.controller';
 import { authGuard } from '../middlewares/auth.middleware';
 
@@ -37,5 +38,6 @@ router.post('/:id/duplicate', duplicateCampaign);
 
 // Campaign analytics
 router.get('/:id/analytics', getCampaignAnalytics);
+router.get('/:id/stats', getCampaignStats);
 
 export default router;

@@ -268,7 +268,9 @@ export const sendCampaign = async (req: Request, res: Response) => {
     const userId = getUserId(req);
     const { id } = req.params;
 
-    const campaign = await Campaign.findOne({ _id: id, userId });
+    const campaign = await Campaign.findOne({ _id: id, userId })
+      .populate('audienceId', 'name subscriberCount');
+
     if (!campaign) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
@@ -281,33 +283,59 @@ export const sendCampaign = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Campaign has already been sent' });
     }
 
-    // Validate campaign
     if (!campaign.name || !campaign.subject || !campaign.body) {
       return res.status(400).json({ error: 'Campaign is incomplete' });
     }
 
-    // Update status to sending
+    const Subscriber = (await import('../models/subscriber.model.js')).default;
+    const { addEmailToQueue } = await import('../queues/email.queue.js');
+
+    const subscribers = await Subscriber.find({
+      userId,
+      status: 'active',
+      tags: (campaign.audienceId as any)?.name
+    }).select('email firstName lastName');
+
+    if (subscribers.length === 0) {
+      return res.status(400).json({ error: 'No active subscribers found in audience' });
+    }
+
     campaign.status = CAMPAIGN_STATUS.SENDING;
+    campaign.stats.sent = 0;
+    campaign.stats.delivered = 0;
+    campaign.stats.bounced = 0;
+    (campaign as any)._totalRecipients = subscribers.length;
     await campaign.save();
 
-    // TODO: Integrate with email provider (SendGrid, Mailgun, etc.)
-    // This would typically queue the emails for sending
-    logger.info(`Campaign ${id} sending started`);
+    const emailJobs = subscribers.map(sub => ({
+      campaignId: id.toString(),
+      subscriberEmail: sub.email,
+      subscriberName: sub.firstName || sub.lastName ? `${sub.firstName || ''} ${sub.lastName || ''}`.trim() : undefined,
+      subject: campaign.subject,
+      html: campaign.body,
+      totalRecipients: subscribers.length
+    }));
+
+    for (const job of emailJobs) {
+      await addEmailToQueue(job);
+    }
 
     await AuditLog.create({
       userId,
       action: 'CAMPAIGN_SENT',
       entityType: 'Campaign',
       entityId: campaign._id,
-      newValues: { status: 'sending' },
+      newValues: { status: 'sending', recipientCount: subscribers.length },
       ipAddress: req.ip,
       userAgent: req.get('user-agent')
     });
 
+    logger.info(`Campaign ${id} queued ${subscribers.length} emails`);
+
     return res.json({
       ok: true,
       message: 'Campaign sending started',
-      data: { campaignId: id }
+      data: { campaignId: id, recipientCount: subscribers.length }
     });
   } catch (error) {
     logger.error('Send campaign error:', error);
@@ -579,5 +607,33 @@ export const getCampaignAnalytics = async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('Get campaign analytics error:', error);
     return res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+};
+
+// ======================
+// GET CAMPAIGN STATS
+// ======================
+export const getCampaignStats = async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    const { id } = req.params;
+
+    const campaign = await Campaign.findOne({ _id: id, userId }).select('stats status sentAt');
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    return res.json({
+      ok: true,
+      data: {
+        sentCount: campaign.stats.sent,
+        failedCount: campaign.stats.bounced,
+        status: campaign.status,
+        sentAt: campaign.sentAt
+      }
+    });
+  } catch (error) {
+    logger.error('Get campaign stats error:', error);
+    return res.status(500).json({ error: 'Failed to fetch campaign stats' });
   }
 };
