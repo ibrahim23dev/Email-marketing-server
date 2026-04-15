@@ -1,37 +1,51 @@
-import mongoose, { Schema, Types } from 'mongoose';
+import mongoose, { Schema, Document, Types } from 'mongoose';
 
-const LeadSchema = new Schema(
+export interface ILead extends Document {
+  userId: Types.ObjectId;
+  email: string;
+  name?: string;
+  source?: string;
+  status: 'new' | 'contacted' | 'converted' | 'failed';
+  metadata?: Record<string, any>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const LeadSchema = new Schema<ILead>(
   {
-    /* ── Ownership ─────────────────────────────────── */
     userId: {
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
       index: true
     },
-
-    /* ── Core fields ───────────────────────────────── */
-    name:            { type: String, default: '' },
-    website:         { type: String, default: '' },
-    emails:          { type: [String], default: [] },
-    validatedEmails: { type: [String], default: [] },
-    phones:          { type: [String], default: [] },
-    address:         { type: String, default: '' },
-    sourceActor:     { type: String, default: '' },
-    searchKeyword:   { type: String, default: '' }, // keyword that produced this lead
-    raw:             { type: Schema.Types.Mixed }
+    email: {
+      type: String,
+      required: true,
+      lowercase: true,
+      trim: true
+    },
+    name: {
+      type: String,
+      trim: true
+    },
+    source: {
+      type: String,
+      default: 'manual'
+    },
+    status: {
+      type: String,
+      enum: ['new', 'contacted', 'converted', 'failed'],
+      default: 'new'
+    },
+    metadata: {
+      type: Schema.Types.Mixed,
+      default: {}
+    }
   },
   { timestamps: true }
 );
 
-/* ── Indexes ────────────────────────────────────────── */
-// Per-user dedup lookups
+LeadSchema.index({ userId: 1, email: 1 }, { unique: true });
 
-LeadSchema.index({ userId: 1, website: 1 });
-LeadSchema.index({ userId: 1, emails: 1 });
-// Admin / cross-user lookups
-LeadSchema.index({ website: 1 });
-LeadSchema.index({ emails: 1 });
-
-const Lead = mongoose.model('Lead', LeadSchema);
-export default Lead;
+export default mongoose.model<ILead>('Lead', LeadSchema);

@@ -25,6 +25,8 @@ import userManagementRoutes from './routes/userManagement.routes';
 import auditLogRoutes from './routes/auditLog.routes';
 import smsRoutes from "./routes/sms.routes";
 import paymentRoutes from './routes/payment.routes';
+import emailRoutes from './routes/email.route';
+import leadRoutes from './routes/lead.routes';
 
 dotenv.config();
 
@@ -80,6 +82,8 @@ app.use('/api/users', userManagementRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use("/api/v1/sms", smsRoutes);
 app.use("/api/v1/payment-request", paymentRoutes);
+app.use("/api/v1/email", emailRoutes);
+app.use('/api/v1/leads', leadRoutes);
 
 // ============================================
 // Health Check
@@ -106,6 +110,7 @@ app.get('/api', (req, res) => {
       campaigns: '/api/v1/campaigns',
       templates: '/api/v1/templates',
       audiences: '/api/v1/audiences',
+      leads: '/api/v1/leads',
       subscribers: '/api/subscribers',
       tags: '/api/tags',
       dashboard: '/api/dashboard',

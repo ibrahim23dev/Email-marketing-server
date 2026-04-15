@@ -1,6 +1,7 @@
 import app from './app';
 import { DatabaseManager } from './infrastructure/database';
 import logger from './utils/logger';
+import { startEmailWorker } from './queues/email.queue.js';
 
 // ============================================
 // Server Configuration
@@ -16,11 +17,12 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 async function startServer(): Promise<void> {
   try {
-    // Connect to database
     await DatabaseManager.connect();
     logger.info('Database connected successfully');
 
-    // Start HTTP server
+    startEmailWorker();
+    logger.info('Email worker started');
+
     const server = app.listen(PORT, () => {
       logger.info(`========================================`);
       logger.info(`🚀 Server running in ${NODE_ENV} mode`);
